@@ -5,14 +5,14 @@
     "dirty" : false,
     "encoding" : "UTF-8",
     "folds" : "",
-    "hash" : "0",
+    "hash" : "636965202",
     "id" : "C089AB6C",
-    "lastKnownWriteTime" : 1518583483,
-    "last_content_update" : 1518583483636,
+    "lastKnownWriteTime" : 1518587550,
+    "last_content_update" : 1518587550937,
     "path" : "~/Downloads/MTA/R_Data_Analysis/predictions_analysis.R",
     "project_path" : "predictions_analysis.R",
     "properties" : {
-        "cursorPosition" : "35,0",
+        "cursorPosition" : "28,19",
         "scrollLine" : "18",
         "tempName" : "Untitled1"
     },

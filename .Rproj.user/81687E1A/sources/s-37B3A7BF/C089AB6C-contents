@@ -24,17 +24,15 @@ library(anytime)
 #Read the file, enter the exact file name and store it in a data frame named 'Raw_file':
 Arrivals <- read_csv("csv_files/split_aa.csv")
 #Make column names consistent 
-rename(Arrivals, tail_stop_arrival_time = tailStopArrivalTime)
-Arrivals$tail_stop_arrival_time <- anytime(tail_stop_arrival_time/1000)
+names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arrival_time'
+#view entire numerical values without a scientific format:
+options(scipen=999)
+#Convert epoch to POSIXct 
+Arrivals$tail_stop_arrival_time <- anytime(Arrivals$tail_stop_arrival_time/1000)
 Arrivals$time_of_sample <- anytime(Arrivals$time_of_sample/1000)
 
 #View the Raw_file by clicking on it in the Environment window towards the right end of the screen:
 #Go to View >> Show Environment
 
-#view entire numerical values without a scientific format:
-options(scipen=999)
 
-#Copy the Raw_file in a new data frame, perform all operations on the new data frame.
-#This step is optional and done only to avoid reading the raw file again from disk location.
-#However, this might slow down the processing speed based on the file size.
 
