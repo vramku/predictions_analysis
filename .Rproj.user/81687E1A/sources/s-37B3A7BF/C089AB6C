@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1518581604969.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "C089AB6C",
+    "lastKnownWriteTime" : 1518583483,
+    "last_content_update" : 1518583483636,
+    "path" : "~/Downloads/MTA/R_Data_Analysis/predictions_analysis.R",
+    "project_path" : "predictions_analysis.R",
+    "properties" : {
+        "cursorPosition" : "35,0",
+        "scrollLine" : "18",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}
