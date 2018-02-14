@@ -21,18 +21,44 @@ library(xlsx)
 #for epoch to posix_ct conversion
 library(anytime)
 
-#Read the file, enter the exact file name and store it in a data frame named 'Raw_file':
+setwd("/home/smertmashina/Downloads/MTA/R_Data_Analysis/") 
+#Read in the .csv file
 Arrivals <- read_csv("csv_files/split_aa.csv")
-#Make column names consistent 
+#Make column names consistent (underscore-separated naming convention) 
 names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arrival_time'
-#view entire numerical values without a scientific format:
+#view entire numerical values without a scientific format
 options(scipen=999)
-#Convert epoch to POSIXct 
-Arrivals$tail_stop_arrival_time <- anytime(Arrivals$tail_stop_arrival_time/1000)
-Arrivals$time_of_sample <- anytime(Arrivals$time_of_sample/1000)
 
-#View the Raw_file by clicking on it in the Environment window towards the right end of the screen:
-#Go to View >> Show Environment
+#Convert epoch time (ms since 1/1/1970) to POSIXct 
+#Arrivals$tail_stop_arrival_time <- anytime(Arrivals$tail_stop_arrival_time/1000)
+#Arrivals$time_of_sample <- anytime(Arrivals$time_of_sample/1000)
+#Arrivals$predicted_arrival <- anytime(Arrivals$predicted_arrival/1000)
+Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time/1000),
+                                time_of_sample=anytime(time_of_sample/1000),
+                                predicted_arrival=anytime(predicted_arrival/1000))
+#Calculate Measured, Predicted and Residual times
+Arrivals$time_to_arrival = (Arrivals$tail_stop_arrival_time - Arrivals$time_of_sample)
+Arrivals$prediction = (Arrivals$predicted_arrival - Arrivals$time_of_sample)
+Arrivals$residual = (Arrivals$tail_stop_arrival_time - Arrivals$predicted_arrival) #Possibly redundant. Consider taking abs of residual
+
+#Take the absolute values of the Residual Time:
+Arrivals$abs_residual = abs(Arrivals$residual)
+
+#creating buckets for AbsResidual and storing in new column 'timeRes':
+Arrivals$time_res = cut(as.numeric(Arrivals$abs_residual), c(-Inf,60,120,240,360,Inf),labels=c("0-1","1-2","2-4","4-6","6+"))  
+
+#Classify Measured Time from seconds to minutes and check for errors: ??? >30 or 30-60 
+Arrivals$time_period = cut(as.numeric(Arrivals$time_to_arrival), c(-Inf,0,300,600,1200,1800,3600,Inf),
+                          labels=c("err","0--5","5--10","10--20","20--30",">30",">60"))
+
+#Eliminate records classified as Errors
+Arrivals <- subset(Arrivals, time_period != "err")
+df <- read.table(text=Arrivals$trip, sep="_")
+#cbind(Arrivals,(read.table(text=Arrivals$trip, sep="_", col.names = c("bc_or_nyct", "depot"))))
+Arrivals <- subset(Arrivals, select = -trip)
+
+
+
 
 
 
