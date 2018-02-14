@@ -35,7 +35,8 @@ options(scipen=999)
 #Arrivals$predicted_arrival <- anytime(Arrivals$predicted_arrival/1000)
 Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time/1000),
                                 time_of_sample=anytime(time_of_sample/1000),
-                                predicted_arrival=anytime(predicted_arrival/1000))
+                                predicted_arrival=anytime(predicted_arrival/1000),
+                                service_date=anytime(service_date/1000))
 #Calculate Measured, Predicted and Residual times
 Arrivals$time_to_arrival = (Arrivals$tail_stop_arrival_time - Arrivals$time_of_sample)
 Arrivals$prediction = (Arrivals$predicted_arrival - Arrivals$time_of_sample)
@@ -53,9 +54,16 @@ Arrivals$time_period = cut(as.numeric(Arrivals$time_to_arrival), c(-Inf,0,300,60
 
 #Eliminate records classified as Errors
 Arrivals <- subset(Arrivals, time_period != "err")
-df <- read.table(text=Arrivals$trip, sep="_")
+
+#df <- read.table(text=Arrivals$trip, sep="_")
 #cbind(Arrivals,(read.table(text=Arrivals$trip, sep="_", col.names = c("bc_or_nyct", "depot"))))
-Arrivals <- subset(Arrivals, select = -trip)
+#Arrivals <- subset(Arrivals, select = -trip)
+
+#Extract depot information from attribute 'trip':
+Arrivals$depot = sapply(str_split(Arrivals$trip, "_"),function(x){x[2]})
+print(Arrivals$depot)
+Arrivals$depot = sapply(str_split(Arrivals$depot, "-"),function(x){x[length(x)]})
+print(Arrivals$depot)
 
 
 
