@@ -55,15 +55,20 @@ Arrivals$time_period = cut(as.numeric(Arrivals$time_to_arrival), c(-Inf,0,300,60
 #Eliminate records classified as Errors
 Arrivals <- subset(Arrivals, time_period != "err")
 
-#df <- read.table(text=Arrivals$trip, sep="_")
-#cbind(Arrivals,(read.table(text=Arrivals$trip, sep="_", col.names = c("bc_or_nyct", "depot"))))
-#Arrivals <- subset(Arrivals, select = -trip)
-
+#Extracts depot codes from the trip fielddf <- read.table(text=Arrivals$trip, sep="_")
+extract.depot <- function(trip_string) {
+  if (regexpr('^MTA\\s', trip_string) != -1) {
+    return(substr(trip_string, 10, 11))
+  }
+  substr_idx <- regexpr('-[A-Z]{2}_', trip_string)
+  return(substr(trip_string, substr_idx + 1, substr_idx + 2))
+}
 #Extract depot information from attribute 'trip':
-Arrivals$depot = sapply(str_split(Arrivals$trip, "_"),function(x){x[2]})
-print(Arrivals$depot)
-Arrivals$depot = sapply(str_split(Arrivals$depot, "-"),function(x){x[length(x)]})
-print(Arrivals$depot)
+Arrivals$depot = sapply(Arrivals$tri, extract.depot)
+
+
+  
+
 
 
 
