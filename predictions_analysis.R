@@ -7,19 +7,24 @@
 #!!page 150 for reading fixed width files without resorting to SAS 
 #for ODBC, try rows_at_a_time=1024 pg. 166 Don't forget to close the connection with odbcClose()
 #anytime library for converting epoch to PosixCt don't forget to / by 1000
-#Package 'readr' required for faster file reading command:
-library(readr)
-#install package for performing operations on data type string:
-library(stringr)
-#Eliminate groups of records having one or more time components as Zero:
-#for grouping, we require package 'dplyr':
-library(dplyr)
-#package for exporting data:
-library(rio)
+
+library(readr)   #required for faster file reading command
+library(stringr) #for performing operations on data type string
+library(dplyr)   #for grouping
+library(rio)     #packages for exporting data
 library(rJava)
 library(xlsx)
-#for epoch to posix_ct conversion
-library(anytime)
+library(anytime) #for epoch to posix_ct conversion
+
+#User Defined Functions
+#Extracts depot codes from the trip field <- read.table(text=Arrivals$trip, sep="_")
+extract.depot <- function(trip_string) {
+  if (regexpr('^MTA\\s', trip_string) != -1) {
+    return(substr(trip_string, 10, 11))
+  }
+  substr_idx <- regexpr('-[A-Z]{2}_', trip_string)
+  return(substr(trip_string, substr_idx + 1, substr_idx + 2))
+}
 
 setwd("/home/smertmashina/Downloads/MTA/R_Data_Analysis/") 
 #Read in the .csv file
@@ -30,13 +35,11 @@ names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arrival_
 options(scipen=999)
 
 #Convert epoch time (ms since 1/1/1970) to POSIXct 
-#Arrivals$tail_stop_arrival_time <- anytime(Arrivals$tail_stop_arrival_time/1000)
-#Arrivals$time_of_sample <- anytime(Arrivals$time_of_sample/1000)
-#Arrivals$predicted_arrival <- anytime(Arrivals$predicted_arrival/1000)
 Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time/1000),
                                 time_of_sample=anytime(time_of_sample/1000),
                                 predicted_arrival=anytime(predicted_arrival/1000),
                                 service_date=anytime(service_date/1000))
+
 #Calculate Measured, Predicted and Residual times
 Arrivals$time_to_arrival = (Arrivals$tail_stop_arrival_time - Arrivals$time_of_sample)
 Arrivals$prediction = (Arrivals$predicted_arrival - Arrivals$time_of_sample)
@@ -55,17 +58,19 @@ Arrivals$time_period = cut(as.numeric(Arrivals$time_to_arrival), c(-Inf,0,300,60
 #Eliminate records classified as Errors
 Arrivals <- subset(Arrivals, time_period != "err")
 
-#Extracts depot codes from the trip fielddf <- read.table(text=Arrivals$trip, sep="_")
-extract.depot <- function(trip_string) {
-  if (regexpr('^MTA\\s', trip_string) != -1) {
-    return(substr(trip_string, 10, 11))
-  }
-  substr_idx <- regexpr('-[A-Z]{2}_', trip_string)
-  return(substr(trip_string, substr_idx + 1, substr_idx + 2))
-}
 #Extract depot information from attribute 'trip':
-Arrivals$depot = sapply(Arrivals$tri, extract.depot)
+Arrivals$depot = sapply(Arrivals$trip, extract.depot)
 
+#Extract historical, recent, and scheduled times in ms from the colon_delimited_db_components column 
+Arrivals <- tidyr::extract(Arrivals, colon_delimited_db_components, 
+                           c('historical', 'recent', 'schedule'), 
+                           "(?:HISTORICAL_([0-9]+))(?::RECENT_([0-9]+))(?::SCHEDULE_([0-9]+))", 
+                           remove=TRUE, convert = TRUE) 
+
+#convert miliseconds to seconds 
+transform(Arrivals, historical = historical / 1000, 
+                    recent = recent / 1000, 
+                    schedule = schedule / 1000)
 
   
 
