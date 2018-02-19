@@ -15,18 +15,20 @@ library(rio)     #packages for exporting data
 library(rJava)
 library(xlsx)
 library(anytime) #for epoch to posix_ct conversion
+library(tidyr)   #for data extraction and cleanup 
 
 #User Defined Functions
 #Extracts depot codes from the trip field <- read.table(text=Arrivals$trip, sep="_")
 extract.depot <- function(trip_string) {
   if (regexpr('^MTA\\s', trip_string) != -1) {
-    return(substr(trip_string, 10, 11))
+      return(substr(trip_string, 10, 11))
+    } else {
+      substr_idx <- regexpr('-[A-Z]{2}_', trip_string)
+      return(substr(trip_string, substr_idx + 1, substr_idx + 2)) 
   }
-  substr_idx <- regexpr('-[A-Z]{2}_', trip_string)
-  return(substr(trip_string, substr_idx + 1, substr_idx + 2))
 }
 
-setwd("/home/smertmashina/Downloads/MTA/R_Data_Analysis/") 
+setwd("/home/grommashina/Documents/MTA/predictions_analysis") 
 #Read in the .csv file
 Arrivals <- read_csv("csv_files/split_aa.csv")
 #Make column names consistent (underscore-separated naming convention) 
@@ -68,9 +70,15 @@ Arrivals <- tidyr::extract(Arrivals, colon_delimited_db_components,
                            remove=TRUE, convert = TRUE) 
 
 #convert miliseconds to seconds 
-transform(Arrivals, historical = historical / 1000, 
-                    recent = recent / 1000, 
-                    schedule = schedule / 1000)
+Arrivals <- transform(Arrivals, historical = historical / 1000, 
+                                recent = recent / 1000, 
+                                schedule = schedule / 1000)
+
+Arrivals <- Arrivals %>% group_by(distance_along_trip) %>% filter(!any(historical * recent * schedule == 0))
+
+
+
+
 
   
 
