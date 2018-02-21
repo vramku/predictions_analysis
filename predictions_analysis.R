@@ -17,18 +17,7 @@ library(xlsx)
 library(anytime) #for epoch to posix_ct conversion
 library(tidyr)   #for data extraction and cleanup 
 
-#User Defined Functions
-#Extracts depot codes from the trip field <- read.table(text=Arrivals$trip, sep="_")
-extract.depot <- function(trip_string) {
-  if (regexpr('^MTA\\s', trip_string) != -1) {
-      return(substr(trip_string, 10, 11))
-    } else {
-      substr_idx <- regexpr('-[A-Z]{2}_', trip_string)
-      return(substr(trip_string, substr_idx + 1, substr_idx + 2)) 
-  }
-}
-
-setwd("/home/grommashina/Documents/MTA/predictions_analysis") 
+setwd("/home/smertmashina/Downloads/MTA/R_Data_Analysis") 
 #Read in the .csv file
 Arrivals <- read_csv("csv_files/split_aa.csv")
 #Make column names consistent (underscore-separated naming convention) 
@@ -60,10 +49,11 @@ Arrivals$time_period = cut(as.numeric(Arrivals$time_to_arrival), c(-Inf,0,300,60
 #Eliminate records classified as Errors
 Arrivals <- subset(Arrivals, time_period != "err")
 
-#Extract depot information from attribute 'trip':
-Arrivals$depot = sapply(Arrivals$trip, extract.depot)
+#Extract depot information from attribute 'trip'. Optimized to 1.2 vs 7.1 secs:
+Arrivals <- tidyr::extract(Arrivals, trip, 'depot', "(?:MTA)(?: NYCT_|BC_[0-9]+-)([A-Z]{2})", remove=TRUE, perl=TRUE, useBytes=TRUE)
 
-#Extract historical, recent, and scheduled times in ms from the colon_delimited_db_components column 
+
+#Extract historical, recent, and scheduled times in ms from the colon_delimited_db_components column. Performs 3.3 vs 23.1
 Arrivals <- tidyr::extract(Arrivals, colon_delimited_db_components, 
                            c('historical', 'recent', 'schedule'), 
                            "(?:HISTORICAL_([0-9]+))(?::RECENT_([0-9]+))(?::SCHEDULE_([0-9]+))", 
