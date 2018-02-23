@@ -7,6 +7,8 @@
 #!!page 150 for reading fixed width files without resorting to SAS 
 #for ODBC, try rows_at_a_time=1024 pg. 166 Don't forget to close the connection with odbcClose()
 #anytime library for converting epoch to PosixCt don't forget to / by 1000
+#library(parallel) to speed up processing boxplot.stats(x)$out to detect outliers 
+#editrules for consistency checking (igraph package not supported on 3.4 yet)
 
 library(readr)   #required for faster file reading command
 library(stringr) #for performing operations on data type string
@@ -17,19 +19,20 @@ library(xlsx)
 library(anytime) #for epoch to posix_ct conversion
 library(tidyr)   #for data extraction and cleanup 
 
-setwd("/home/smertmashina/Downloads/MTA/R_Data_Analysis") 
-#Read in the .csv file
-Arrivals <- read_csv("csv_files/split_aa.csv")
+setwd(".") 
+#Read in the .csv file. Add a vector of column names as a function argument to speed up processing. 
+#tryCatch constructions will help deal with any errors due to erroneous data. Will need to check for NAs
+Arrivals <- read_csv("raw_data/split_aa.csv")
 #Make column names consistent (underscore-separated naming convention) 
 names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arrival_time'
 #view entire numerical values without a scientific format
 options(scipen=999)
 
 #Convert epoch time (ms since 1/1/1970) to POSIXct 
-Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time/1000),
-                                time_of_sample=anytime(time_of_sample/1000),
-                                predicted_arrival=anytime(predicted_arrival/1000),
-                                service_date=anytime(service_date/1000))
+Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time / 1000),
+                                time_of_sample=anytime(time_of_sample / 1000),
+                                predicted_arrival=anytime(predicted_arrival / 1000),
+                                service_date=anytime(service_date / 1000))
 
 #Calculate Measured, Predicted and Residual times
 Arrivals$time_to_arrival = (Arrivals$tail_stop_arrival_time - Arrivals$time_of_sample)
@@ -57,14 +60,17 @@ Arrivals <- tidyr::extract(Arrivals, trip, 'depot', "(?:MTA)(?: NYCT_|BC_[0-9]+-
 Arrivals <- tidyr::extract(Arrivals, colon_delimited_db_components, 
                            c('historical', 'recent', 'schedule'), 
                            "(?:HISTORICAL_([0-9]+))(?::RECENT_([0-9]+))(?::SCHEDULE_([0-9]+))", 
-                           remove=TRUE, convert = TRUE) 
+                           remove=TRUE, convert = TRUE, perl=TRUE, useBytes=TRUE) 
 
 #convert miliseconds to seconds 
 Arrivals <- transform(Arrivals, historical = historical / 1000, 
                                 recent = recent / 1000, 
                                 schedule = schedule / 1000)
 
+#filter out rows with zeros in historical, recent, or schedule 
 Arrivals <- Arrivals %>% group_by(distance_along_trip) %>% filter(!any(historical * recent * schedule == 0))
+
+
 
 
 
