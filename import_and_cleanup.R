@@ -28,6 +28,9 @@ names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arrival_
 #view entire numerical values without a scientific format
 options(scipen=999)
 
+#Round off floating point numbers for data consistency 
+Arrivals$distance_along_trip <- round(Arrivals$distance_along_trip, prec = 1)
+
 #Convert epoch time (ms since 1/1/1970) to POSIXct 
 Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time / 1000),
                                 time_of_sample=anytime(time_of_sample / 1000),
