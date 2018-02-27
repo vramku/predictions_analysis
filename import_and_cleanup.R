@@ -9,16 +9,20 @@
 #anytime library for converting epoch to PosixCt don't forget to / by 1000
 #library(parallel) to speed up processing boxplot.stats(x)$out to detect outliers 
 #editrules for consistency checking (igraph package not supported on 3.4 yet)
+#look at various bin cuts; consider changing values to NA, instead of deleting rows 
 
-library(readr)   #required for faster file reading command
-library(stringr) #for performing operations on data type string
-library(dplyr)   #for grouping
-library(rio)     #packages for exporting data
+library(readr)      #required for faster file reading command
+library(stringr)    #for performing operations on data type string
+library(plyr)       #namespace conflicts b/w plyr and dplyr
+library(dplyr)      #grouping
+library(rio)        #packages for exporting data
 library(rJava)
 library(xlsx)
-library(anytime) #for epoch to posix_ct conversion
-library(tidyr)   #for data extraction and cleanup 
+library(anytime)    #epoch to posix_ct conversion
+library(tidyr)      #data extraction and cleanup 
+library(doParallel) #multicore processing for the plyr::ddply step
 
+cleaned_path <- file.path("./cleaned_data/")
 setwd(".") 
 #Read in the .csv file. Add a vector of column names as a function argument to speed up processing. 
 #tryCatch constructions will help deal with any errors due to erroneous data. Will need to check for NAs
@@ -28,8 +32,8 @@ names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arrival_
 #view entire numerical values without a scientific format
 options(scipen=999)
 
-#Round off floating point numbers for data consistency 
-Arrivals$distance_along_trip <- round(Arrivals$distance_along_trip, prec = 1)
+#Round off floating point numbers for data consistency. Consider using int instead of double? due to GPS error & magnitutde of measurement
+#Arrivals$distance_along_trip <- round(Arrivals$distance_along_trip, digits = 4)
 
 #Convert epoch time (ms since 1/1/1970) to POSIXct 
 Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival_time / 1000),
@@ -70,16 +74,29 @@ Arrivals <- transform(Arrivals, historical = historical / 1000,
                                 recent = recent / 1000, 
                                 schedule = schedule / 1000)
 
-#filter out rows with zeros in historical, recent, or schedule 
-Arrivals <- Arrivals %>% group_by(distance_along_trip) %>% filter(!any(historical * recent * schedule == 0))
+#Running this step before removing invalid 'stop' rows risks losing valid data 
+#filter out rows with zeros in historical, recent, or schedule. Check after filtering rows by gtfs_stops | vs *
+#Arrivals <- Arrivals %>% group_by(time_of_sample, route, vehicle) %>% filter(!any(historical == 0 | schedule == 0 | recent == 0))
 
+#used to substitute invalid gtfs stop numbers after a skipped projected stop 
+del_miss_stops <- function (df, column = 'stop_gtfs_sequence') {
+  first_stop <- df[1, column]
+  for (row in seq_len(nrow(df))) {
+    ifelse (row == df[row, column] - first_stop + 1 , next, df[row, column] <- NA)
+  }
+  return (df)
+}
 
+#Set up the parallel backend for plyr::ddply
+registerDoParallel(cores = 3)      
+#Mark invalid gtfs values in every bus report as NA
+ArrivalsNA <- plyr::ddply(Arrivals, .(time_of_sample, route, vehicle), del_miss_stops, .parallel = TRUE)
+#Release memory by deleting the redundant Arrivals object.
+if_else(write_csv(ArrivalsNA, "./cleaned_data/Arrivals2NA.csv"), rm(Arrivals), stop())
 
-
-
-
-
-  
+#for testing gtfs sequence skips 
+#df <- head(Arrivals, n = 10000)
+#df2 %>% group_by(time_of_sample, route, vehicle) %>% summarize(stop_gtfs_sequence = paste(sort(unique(stop_gtfs_sequence)),collapse=", "))  
 
 
 
