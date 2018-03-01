@@ -22,7 +22,6 @@ library(anytime)    #epoch to posix_ct conversion
 library(tidyr)      #data extraction and cleanup 
 library(doParallel) #multicore processing for the plyr::ddply step
 
-cleaned_path <- file.path("./cleaned_data/")
 setwd(".") 
 #Read in the .csv file. Add a vector of column names as a function argument to speed up processing. 
 #tryCatch constructions will help deal with any errors due to erroneous data. Will need to check for NAs
@@ -42,8 +41,8 @@ Arrivals <- transform(Arrivals, tail_stop_arrival_time=anytime(tail_stop_arrival
                                 service_date=anytime(service_date / 1000))
 
 #Calculate Measured, Predicted and Residual times
-Arrivals$time_to_arrival = (Arrivals$tail_stop_arrival_time - Arrivals$time_of_sample)
-Arrivals$prediction = (Arrivals$predicted_arrival - Arrivals$time_of_sample)
+Arrivals$measured_time = (Arrivals$tail_stop_arrival_time - Arrivals$time_of_sample)
+Arrivals$predicted_time = (Arrivals$predicted_arrival - Arrivals$time_of_sample)
 Arrivals$residual = (Arrivals$tail_stop_arrival_time - Arrivals$predicted_arrival) #Possibly redundant. Consider taking abs of residual
 
 #Take the absolute values of the Residual Time:
@@ -92,7 +91,7 @@ registerDoParallel(cores = 3)
 #Mark invalid gtfs values in every bus report as NA
 ArrivalsNA <- plyr::ddply(Arrivals, .(time_of_sample, route, vehicle), del_miss_stops, .parallel = TRUE)
 #Release memory by deleting the redundant Arrivals object.
-if_else(write_csv(ArrivalsNA, "./cleaned_data/Arrivals2NA.csv"), rm(Arrivals), stop())
+write_csv(ArrivalsNA, "./cleaned_data/Arrivals2NA.csv")
 
 #for testing gtfs sequence skips 
 #df <- head(Arrivals, n = 10000)
