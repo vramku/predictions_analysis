@@ -87,7 +87,7 @@ del_miss_stops <- function (df, column = 'stop_gtfs_sequence') {
   return (df)
 }
 
-#Set up the parallel backend for plyr::ddply
+#Set up a parallel backend for plyr::ddply
 registerDoParallel(cores = 3)      
 #Mark invalid gtfs values in every bus report as NA
 ArrivalsNA <- plyr::ddply(Arrivals, .(time_of_sample, route, vehicle), del_miss_stops, .parallel = TRUE)
