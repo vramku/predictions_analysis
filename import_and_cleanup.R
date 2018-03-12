@@ -94,6 +94,11 @@ Arrivals <- transform(Arrivals, historical = as.integer(historical / 1000),
                                 recent = as.integer(recent / 1000), 
                                 schedule = as.integer(schedule / 1000))
 
+#remove unnecessary columns
+Arrivals <- subset(Arrivals, select = -c(colon_delimited_used_components))
+
+
+
 #used to mark invalid gtfs stop numbers after a skipped projected stop or an express "jump", as well as express buses
 mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
   rows_in_df <- nrow(df)
@@ -158,10 +163,9 @@ Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>% muta
 
 Pred_Data_Cleaned <- Pred_Data_Cleaned[c("vehicle", "timestamp", "route", "historical", "recent", "schedule",
                            "hist_cum", "rece_cum", "sche_cum", "predicted_t", "measured_t", "residual",
-                           "abs_residual", "stop_gtfs_seq", "predicted_bins", 
-                           "dist_covered", "dist_from_origin", "total_trip_dist", "depot",
-                           "phase", "direction", "shape", "stop_id", "block", "service_date", "predicted_arrival",
-                           "colon_delimited_used_components")] 
+                           "abs_residual", "stop_gtfs_seq", "predicted_bins", "phase", "direction",
+                           "dist_covered", "dist_from_origin", "total_trip_dist", "depot", "is_express", "is_invalid",
+                            "shape", "stop_id", "block", "service_date", "predicted_arrival", "tail_stop_arr_time")] 
 
 #filter groups that have zeros in either historical, recent, or schedule 
 Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>% 
