@@ -23,7 +23,6 @@ library(anytime)    #epoch to posix_ct conversion
 library(tidyr)      #data extraction and cleanup 
 library(doParallel) #multicore processing for the plyr::ddply step
 
-setwd(".") 
 #Read in the .csv file. 
 #tryCatch constructions will help deal with any errors due to erroneous data. Will need to check for NAs
 Arrivals <- read_csv("raw_data/split_aa.csv")
@@ -176,7 +175,10 @@ Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>%
 #primary key check
 #Pred_Data_Cleaned %>% count(timestamp, vehicle, stop_gtfs_seq) %>% filter(n > 1)
 #Release memory by deleting the redundant Arrivals object.
+#Save results to external .csv files
 write_csv(Pred_Data_Cleaned, "./cleaned_data/Pred_Data_Cleaned.csv")
+Pred_Data_Cleaned %>% filter(is_express == T) %>% write_csv(., "./cleaned_data/Pred_Data_Express")
+Pred_Data_Cleaned %>% filter(is_express == F) %>% write_csv(., "./cleaned_data/Pred_Data_Local")
 rm(Arrivals)
 tend <- Sys.time()
 print(totalt <- tend - tstart)
