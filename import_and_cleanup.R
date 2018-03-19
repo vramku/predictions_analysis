@@ -6,11 +6,12 @@
 #read_csv is a great idea. It is much faster at reading large csv files than the native read.csv
 #!!page 150 for reading fixed width files without resorting to SAS 
 #for ODBC, try rows_at_a_time=1024 pg. 166 Don't forget to close the connection with odbcClose()
-#anytime library for converting epoch to`` PosixCt don't forget to / by 1000
+#lubridate library for converting epoch to`` PosixCt don't forget to / by 1000
 #library(parallel) to speed up processing boxplot.stats(x)$out to detect outliers 
 #editrules for consistency checking (igraph package not supported on 3.4 yet)
 #look at various bin cuts; consider changing values to NA, instead of deleting rows 
 #this code cleans a 700MB prediction file in about 5 minutes 
+
 tstart <- Sys.time()
 library(readr)      #required for faster file reading command
 library(stringr)    #for performing operations on data type string
@@ -19,10 +20,12 @@ library(dplyr)      #grouping
 library(rio)        #packages for exporting data
 library(rJava)
 library(xlsx)
-library(anytime)    #epoch to posix_ct conversion
+library(lubridate)  #epoch to posix_ct conversion
 library(tidyr)      #data extraction and cleanup 
 library(doParallel) #multicore processing for the plyr::ddply step
 
+#set the timezone using IANA convention 
+timezone <- "America/New_York"
 #Read in the .csv file. 
 #tryCatch constructions will help deal with any errors due to erroneous data. Will need to check for NAs
 Arrivals <- read_csv("raw_data/split_aa.csv")
@@ -39,15 +42,15 @@ names(Arrivals)[names(Arrivals) == 'time_of_sample'] <- 'timestamp'
 options(scipen=999)
 
 #Convert epoch time (ms since 1/1/1970) to POSIXct 
-Arrivals <- transform(Arrivals, tail_stop_arr_time = anytime(tail_stop_arr_time / 1000),
-                                timestamp = anytime(timestamp / 1000),
-                                predicted_arrival = anytime(predicted_arrival / 1000),
-                                service_date = anytime(service_date / 1000))
+Arrivals <- transform(Arrivals, tail_stop_arr_time = as_datetime(tail_stop_arr_time / 1000, tz = timezone),
+                                timestamp = as_datetime(timestamp / 1000, tz = timezone),
+                                predicted_arrival = as_datetime(predicted_arrival / 1000, tz = timezone),
+                                service_date = as_datetime(service_date / 1000, tz = timezone))
 
 #Calculate Measured, Predicted and Residual times (timeToArrival and prediction in the old code)
-Arrivals$measured_t <- as.integer(Arrivals$tail_stop_arr_time - Arrivals$timestamp)
-Arrivals$predicted_t <- as.integer(Arrivals$predicted_arrival - Arrivals$timestamp)
-Arrivals$residual <- as.integer(Arrivals$tail_stop_arr_time - Arrivals$predicted_arrival) #Possibly redundant. Consider taking abs of residual
+Arrivals$measured_t <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$timestamp))
+Arrivals$predicted_t <-(as.double(Arrivals$predicted_arrival - Arrivals$timestamp))
+Arrivals$residual <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$predicted_arrival)) #Possibly redundant. Consider taking abs of residual
 
 #Take the absolute values of the corresponding residual times:
 Arrivals$abs_residual <- abs(Arrivals$residual)
@@ -56,10 +59,10 @@ Arrivals$abs_residual <- abs(Arrivals$residual)
 Arrivals$dist_covered <- round(Arrivals$dist_covered, digits = 2)
 Arrivals$dist_from_origin <- round(Arrivals$dist_from_origin, digits = 2)
 Arrivals$total_trip_dist <- round(Arrivals$total_trip_dist, digits = 2)
-#Arrivals$measured_t <- round(Arrivals$measured_t, digits = 4)
-#Arrivals$predicted_t <- round(Arrivals$predicted_t, digits = 4)
-#Arrivals$abs_residual <- round(Arrivals$abs_residual, digits = 4)
-#Arrivals$residual <- round(Arrivals$residual, digits = 4)
+Arrivals$measured_t <- round(Arrivals$measured_t, digits = 3)
+Arrivals$predicted_t <- round(Arrivals$predicted_t, digits = 3)
+Arrivals$abs_residual <- round(Arrivals$abs_residual, digits = 3)
+Arrivals$residual <- round(Arrivals$residual, digits = 3)
 
 
 #creating buckets for abs_residuals 
@@ -67,7 +70,7 @@ Arrivals$abs_res_bins <- cut(as.numeric(Arrivals$abs_residual), c(-Inf, 60, 120,
                               labels = c("0-1","1-2","2-4","4-6","6+")) 
 
 #Classify Measured Time from seconds to minutes and check for errors: ??? >30 or 30-60 
-#Arrivals$measured_bins <- cut(as.numeric(Arrivals$measured_t), c(-Inf, 0, 300, 600, 1200, 1800, 3600, Inf),
+#Arrivals$measured_bins <- cut(as.duration(Arrivals$measured_t), dseconds(c(-Inf, 0, 300, 600, 1200, 1800, 3600, Inf)),
 #                              labels = c("err","0--5","5--10","10--20","20--30",">30",">60"))
 
 #Eliminate records classified as errors
@@ -89,15 +92,15 @@ Arrivals <- tidyr::extract(Arrivals, colon_delimited_db_components,
                            remove=TRUE, convert = TRUE, perl=TRUE, useBytes=TRUE) 
 
 #convert miliseconds to seconds 
-Arrivals <- transform(Arrivals, historical = as.integer(historical / 1000), 
-                                recent = as.integer(recent / 1000), 
-                                schedule = as.integer(schedule / 1000))
+Arrivals <- transform(Arrivals, historical = (as.double(historical / 1000)), 
+                                recent = (as.double(recent / 1000)), 
+                                schedule = (as.double(schedule / 1000)))
 
 #remove unnecessary columns
 Arrivals <- subset(Arrivals, select = -c(colon_delimited_used_components))
 
 
-
+#used == in this function, which is vectorized; better to compare using identical(arg1, arg2)
 #used to mark invalid gtfs stop numbers after a skipped projected stop or an express "jump", as well as express buses
 mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
   rows_in_df <- nrow(df)
@@ -110,13 +113,17 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
   #iterate through the group looking for skipped stops 
   first_stop <- df[1, column]
   
-  for (row in seq_len(rows_in_df))  {
+  for (row in seq_len(rows_in_df)) {
     df$is_express <- is_express
     ifelse (row == df[row, column] - first_stop + 1 , df$is_invalid[row] <- FALSE, df$is_invalid[row] <- TRUE)
   }
   
-  #mark first record as invalid for our computational purposes
+  #mark first record as invalid for our computational purposes and adjust component values based on predicted time
+  #since this is weighted average, setting each component to the value of predicted_t ensured consistency of the following rows
   df$is_invalid[1] <- TRUE
+  df$historical[1] <- df$predicted_t[1] 
+  df$recent[1]     <- df$predicted_t[1]
+  df$schedule[1]   <- df$predicted_t[1]
   
   #continue checking for jumps if the bus is an express bus, else return
   if (!is_express) {return(df)}
@@ -147,7 +154,7 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
 #Set up a parallel backend for plyr::ddply
 registerDoParallel(cores = 3)      
 
-#Mark invalid gtfs values in every bus report as NA
+#Mark rows with invalid gtfs values and express routes
 Pred_Data_Cleaned <- plyr::ddply(Arrivals, .(timestamp, vehicle), mark_invalid_stops, .parallel = TRUE)
 
 
@@ -157,19 +164,19 @@ Pred_Data_Cleaned <- plyr::ddply(Arrivals, .(timestamp, vehicle), mark_invalid_s
 
 #Create columns showing to accumulated historical, recent and scheduled times for each report 
 Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>% mutate(hist_cum = cumsum(historical),
-                                                                          rece_cum = cumsum(recent),
-                                                                          sche_cum = cumsum(schedule))
+                                                                                   rece_cum = cumsum(recent),
+                                                                                   sche_cum = cumsum(schedule))
 
 Pred_Data_Cleaned <- Pred_Data_Cleaned[c("vehicle", "timestamp", "route", "historical", "recent", "schedule",
                            "hist_cum", "rece_cum", "sche_cum", "predicted_t", "measured_t", "residual",
                            "abs_residual", "stop_gtfs_seq", "predicted_bins", "phase", "direction",
                            "dist_covered", "dist_from_origin", "total_trip_dist", "depot", "is_express", "is_invalid",
-                            "shape", "stop_id", "block", "service_date", "predicted_arrival", "tail_stop_arr_time")] 
+                           "shape", "stop_id", "block", "service_date", "predicted_arrival", "tail_stop_arr_time")] 
 
 #filter groups that have zeros in either historical, recent, or schedule 
 Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>% 
-                             filter(!any((historical == 0 | schedule == 0 | recent == 0) & stop_gtfs_seq != "NA")) %>%
-                             arrange(timestamp, vehicle)
+                     filter(!any((near(historical, 0) | near(schedule, 0) | near(recent, 0)))) %>%
+                     arrange(timestamp, vehicle)
 
 
 #primary key check
@@ -177,8 +184,8 @@ Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>%
 #Release memory by deleting the redundant Arrivals object.
 #Save results to external .csv files
 write_csv(Pred_Data_Cleaned, "./cleaned_data/Pred_Data_Cleaned.csv")
-Pred_Data_Cleaned %>% filter(is_express == T) %>% write_csv(., "./cleaned_data/Pred_Data_Express")
-Pred_Data_Cleaned %>% filter(is_express == F) %>% write_csv(., "./cleaned_data/Pred_Data_Local")
+Pred_Data_Cleaned %>% filter(is_express == T) %>% write_csv(., "./cleaned_data/Pred_Data_Express.csv")
+Pred_Data_Cleaned %>% filter(is_express == F) %>% write_csv(., "./cleaned_data/Pred_Data_Local.csv")
 rm(Arrivals)
 tend <- Sys.time()
 print(totalt <- tend - tstart)
