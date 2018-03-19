@@ -175,17 +175,22 @@ Pred_Data_Cleaned <- Pred_Data_Cleaned[c("vehicle", "timestamp", "route", "histo
 
 #filter groups that have zeros in either historical, recent, or schedule 
 Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>% 
-                     filter(!any((near(historical, 0) | near(schedule, 0) | near(recent, 0)))) %>%
+                     filter(!any((near(historical, 0) && !is_invalid) | 
+                                 (near(schedule, 0)   && !is_invalid) | 
+                                 (near(recent, 0)     && !is_invalid))) %>%
                      arrange(timestamp, vehicle)
 
 
 #primary key check
 #Pred_Data_Cleaned %>% count(timestamp, vehicle, stop_gtfs_seq) %>% filter(n > 1)
 #Release memory by deleting the redundant Arrivals object.
-#Save results to external .csv files
-write_csv(Pred_Data_Cleaned, "./cleaned_data/Pred_Data_Cleaned.csv")
-Pred_Data_Cleaned %>% filter(is_express == T) %>% write_csv(., "./cleaned_data/Pred_Data_Express.csv")
-Pred_Data_Cleaned %>% filter(is_express == F) %>% write_csv(., "./cleaned_data/Pred_Data_Local.csv")
+#Save valid results to external .csv files
+Pred_Data_Cleaned %>% filter(is_invalid == F) %>% 
+                      write_csv(., "./cleaned_data/Valid_Complete_Data.csv")
+Pred_Data_Cleaned %>% filter((is_express == T) & (is_invalid == F)) %>% 
+                      write_csv(., "./cleaned_data/Valid_Express_Data.csv")
+Pred_Data_Cleaned %>% filter((is_express == F) & (is_invalid == F)) %>% 
+                      write_csv(., "./cleaned_data/Valid_Local_Data.csv")
 rm(Arrivals)
 tend <- Sys.time()
 print(totalt <- tend - tstart)
