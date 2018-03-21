@@ -73,10 +73,6 @@ Arrivals$abs_res_bins <- cut(as.numeric(Arrivals$abs_residual), c(-Inf, 60, 120,
 #Arrivals$measured_bins <- cut(as.duration(Arrivals$measured_t), dseconds(c(-Inf, 0, 300, 600, 1200, 1800, 3600, Inf)),
 #                              labels = c("err","0--5","5--10","10--20","20--30",">30",">60"))
 
-#Eliminate records classified as errors
-#Arrivals <- subset(Arrivals, measured_bins != "err")
-Arrivals <- Arrivals %>% filter(measured_t >= 0)
-
 #Divide the original predictions into various buckets with units as minutes:
 Arrivals$predicted_bins <- cut(as.numeric(Arrivals$predicted_t), c(0, 120, 240, 360, 600, 900, 1200, Inf),
                            labels=c("0--2","2--4","4--6","6--10","10--15","15--20","20+"))  
@@ -110,21 +106,33 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
   is_express <- str_detect(df[1, 'route'], rexpr)
   if (rows_in_df == 1) {(df$is_invalid[1] <- TRUE) & (df$is_express <- is_express) & return(df)}
   
+  #adjust the predicted_t of gtfs_seq 1 by prorating the first prediction time using the distance to the first stop
+  scalar <- (df$dist_from_origin[2] - df$dist_covered[2]) / (df$dist_from_origin[2] - df$dist_from_origin[1])
+  df$historical[2] <- round(df$historical[2] <- df$historical[2] * scalar, digits = 3) 
+  df$recent[2]     <- round(df$recent[2]     <- df$recent[2]     * scalar, digits = 3)
+  df$schedule[2]   <- round(df$schedule[2]   <- df$schedule[2]   * scalar, digits = 3)
+  
+  #eliminate the first row from the data frame; row 2 becomes row 1 in the resultant df; update rows_in_df
+  df <- df[2:rows_in_df,]
+  rows_in_df <- rows_in_df - 1
+  rownames(df) <- seq(length = rows_in_df)
+  
   #iterate through the group looking for skipped stops 
   first_stop <- df[1, column]
   
   for (row in seq_len(rows_in_df)) {
-    df$is_express <- is_express
+    df$is_express[row] <- is_express
     ifelse (row == df[row, column] - first_stop + 1 , df$is_invalid[row] <- FALSE, df$is_invalid[row] <- TRUE)
   }
   
   #mark first record as invalid for our computational purposes and adjust component values based on predicted time
-  #since this is weighted average, setting each component to the value of predicted_t ensured consistency of the following rows
-  df$is_invalid[1] <- TRUE
-  df$historical[1] <- df$predicted_t[1] 
-  df$recent[1]     <- df$predicted_t[1]
-  df$schedule[1]   <- df$predicted_t[1]
-  
+  #since this is a weighted average, setting each component to the value of predicted_t ensures consistency of the following rows
+  #df$is_invalid[1] <- TRUE
+  #df$historical[1] <- df$predicted_t[1] 
+  #df$recent[1]     <- df$predicted_t[1]
+  #df$schedule[1]   <- df$predicted_t[1]
+
+   
   #continue checking for jumps if the bus is an express bus, else return
   if (!is_express) {return(df)}
   borough_id <- NA
@@ -157,6 +165,9 @@ registerDoParallel(cores = 3)
 #Mark rows with invalid gtfs values and express routes
 Pred_Data_Cleaned <- plyr::ddply(Arrivals, .(timestamp, vehicle), mark_invalid_stops, .parallel = TRUE)
 
+#Eliminate records classified as errors
+#Arrivals <- subset(Arrivals, measured_bins != "err")
+#Arrivals <- Arrivals %>% filter(measured_t >= 0)
 
 #for testing gtfs sequence skips 
 #df <- head(Arrivals, n = 10000)
@@ -173,12 +184,19 @@ Pred_Data_Cleaned <- Pred_Data_Cleaned[c("vehicle", "timestamp", "route", "histo
                            "dist_covered", "dist_from_origin", "total_trip_dist", "depot", "is_express", "is_invalid",
                            "shape", "stop_id", "block", "service_date", "predicted_arrival", "tail_stop_arr_time")] 
 
+
 #filter groups that have zeros in either historical, recent, or schedule 
 Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(timestamp, vehicle) %>% 
                      filter(!any((near(historical, 0) && !is_invalid) | 
                                  (near(schedule, 0)   && !is_invalid) | 
                                  (near(recent, 0)     && !is_invalid))) %>%
                      arrange(timestamp, vehicle)
+
+#remove anomalous values that have predicted_t values, which deviate by more than 0.5 from expected comp. calculation
+Pred_Data_Cleaned <- Pred_Data_Cleaned %>% 
+                     mutate(cpred = 0.4*hist_cum + 0.4*rece_cum + 0.2*sche_cum, delta = cpred - predicted_t) %>% 
+                     filter(abs(cpred - predicted_t) < 0.5) 
+
 
 
 #primary key check
