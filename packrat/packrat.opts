@@ -6,7 +6,7 @@ vcs.ignore.src: FALSE
 external.packages:
     haven
     readxl
-local.repos: 
+local.repos:
 load.external.packages.on.startup: TRUE
 ignored.packages: 
 quiet.package.installation: TRUE

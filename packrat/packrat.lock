@@ -1,12 +1,17 @@
 PackratFormat: 1.4
 PackratVersion: 0.4.8.1
-RVersion: 3.4.3
+RVersion: 3.4.4
 Repos: CRAN=https://cran.rstudio.com/
 
 Package: BH
 Source: CRAN
 Version: 1.65.0-1
 Hash: 95f62be4d6916aae14a310a8b56a6475
+
+Package: DBI
+Source: CRAN
+Version: 0.8
+Hash: 9e4e11b4dd391a42d0ab5b0f2544ba61
 
 Package: R6
 Source: CRAN
@@ -17,6 +22,12 @@ Package: RApiDatetime
 Source: CRAN
 Version: 0.0.3
 Hash: daae673f6da0bccb6dea39e1b573fc8a
+
+Package: RSQLite
+Source: CRAN
+Version: 2.0
+Hash: c8e768dd4ac158ea7422948616bae595
+Requires: BH, DBI, Rcpp, bit64, blob, memoise, pkgconfig, plogr
 
 Package: Rcpp
 Source: CRAN
@@ -45,6 +56,23 @@ Version: 0.2
 Hash: 2d69ff431a54f6c4a750754b88c7e0af
 Requires: Rcpp, bindr, plogr
 
+Package: bit
+Source: CRAN
+Version: 1.1-12
+Hash: a4cdb11cf9fd6dd38f9f40c413b81e93
+
+Package: bit64
+Source: CRAN
+Version: 0.9-7
+Hash: 4b195615d19ba49c114eb04e09e30a96
+Requires: bit
+
+Package: blob
+Source: CRAN
+Version: 1.1.1
+Hash: 532700d8073e660dce40a984900bc647
+Requires: prettyunits
+
 Package: cellranger
 Source: CRAN
 Version: 1.1.0
@@ -72,6 +100,17 @@ Source: CRAN
 Version: 1.10.4-3
 Hash: 3c270a59ca3298aba8df3c1ae3bbea19
 
+Package: digest
+Source: CRAN
+Version: 0.6.15
+Hash: 1f202ebd812ac7192be3739245746a13
+
+Package: doParallel
+Source: CRAN
+Version: 1.0.11
+Hash: cb602c6ef64eced7c8f32b206d4d74b4
+Requires: foreach, iterators
+
 Package: dplyr
 Source: CRAN
 Version: 0.7.4
@@ -85,6 +124,12 @@ Version: 0.2.0
 Hash: e5a3b0b96a39f5581467b0c6366f7408
 Requires: magrittr, tibble
 
+Package: foreach
+Source: CRAN
+Version: 1.4.4
+Hash: 4df5ab2c8c35382dacab75d414da6748
+Requires: iterators
+
 Package: glue
 Source: CRAN
 Version: 1.2.0
@@ -94,7 +139,7 @@ Package: haven
 Source: CRAN
 Version: 1.1.1
 Hash: cf81574a856c943a798155580cc1291d
-Requires: Rcpp, forcats, hms, readr, tibble
+Requires: Rcpp, hms, tibble, forcats, readr
 
 Package: hms
 Source: CRAN
@@ -102,10 +147,27 @@ Version: 0.4.1
 Hash: f245eee62ab93358520f95cae7aeb5f4
 Requires: pkgconfig, rlang
 
+Package: iterators
+Source: CRAN
+Version: 1.0.9
+Hash: c2dc1341675d2508c180221949e40e98
+
+Package: lubridate
+Source: CRAN
+Version: 1.7.3
+Hash: c1e1a6dacb69a6ff11275ae2796e17d1
+Requires: Rcpp, stringr
+
 Package: magrittr
 Source: CRAN
 Version: 1.5
 Hash: bdc4d48c3135e8f3b399536ddf160df4
+
+Package: memoise
+Source: CRAN
+Version: 1.1.0
+Hash: 410fcd334bc626db100237cc1370f2e9
+Requires: digest
 
 Package: openxlsx
 Source: CRAN
@@ -122,7 +184,7 @@ Package: pillar
 Source: CRAN
 Version: 1.1.0
 Hash: 576bf712d620ca2b6ca76ca7b6cb5547
-Requires: cli, crayon, rlang, utf8
+Requires: crayon, rlang, utf8, cli
 
 Package: pkgconfig
 Source: CRAN
@@ -133,6 +195,18 @@ Package: plogr
 Source: CRAN
 Version: 0.1-1
 Hash: fb19215402e2d9f1c7f803dcaa806fc2
+
+Package: plyr
+Source: CRAN
+Version: 1.8.4
+Hash: 02588dd72bf343b964fa2fe450e0cf96
+Requires: Rcpp
+
+Package: prettyunits
+Source: CRAN
+Version: 1.0.2
+Hash: 49286102a855640daaa38eafe8b1ec30
+Requires: assertthat, magrittr
 
 Package: purrr
 Source: CRAN
@@ -155,7 +229,7 @@ Package: readxl
 Source: CRAN
 Version: 1.0.0
 Hash: 4ddf09fdec11e2f253fb2beb17330aaa
-Requires: Rcpp, cellranger, tibble
+Requires: Rcpp, tibble, cellranger
 
 Package: rematch
 Source: CRAN
@@ -188,7 +262,7 @@ Package: tibble
 Source: CRAN
 Version: 1.4.2
 Hash: 83895360ce4f8d2ce92eee00526b5b0b
-Requires: cli, crayon, pillar, rlang
+Requires: crayon, rlang, cli, pillar
 
 Package: tidyr
 Source: CRAN
