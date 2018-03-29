@@ -48,9 +48,9 @@ Arrivals <- transform(Arrivals, tail_stop_arr_time = as_datetime(tail_stop_arr_t
                                 service_date = as_datetime(service_date / 1000, tz = timezone))
 
 #Calculate Measured, Predicted and Residual times (timeToArrival and prediction in the old code)
-Arrivals$measured_t <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$time_stamp) / 1000)
-Arrivals$predicted_t <-(as.double(Arrivals$predicted_arrival - Arrivals$time_stamp) / 1000)
-Arrivals$residual <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$predicted_arrival) / 1000) #Possibly redundant. Consider taking abs of residual
+Arrivals$measured_t <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$time_stamp))
+Arrivals$predicted_t <-(as.double(Arrivals$predicted_arrival - Arrivals$time_stamp))
+Arrivals$residual <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$predicted_arrival)) #Possibly redundant. Consider taking abs of residual
 
 #Take the absolute values of the corresponding residual times:
 Arrivals$abs_residual <- abs(Arrivals$residual)
