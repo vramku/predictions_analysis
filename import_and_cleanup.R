@@ -23,6 +23,7 @@ library(xlsx)
 library(lubridate)  #epoch to posix_ct conversion
 library(tidyr)      #data extraction and cleanup 
 library(doParallel) #multicore processing for the plyr::ddply step
+library(RSQLite)    #DBI framework for db access 
 
 #set the timezone using IANA convention 
 timezone <- "America/New_York"
@@ -39,7 +40,7 @@ names(Arrivals)[names(Arrivals) == 'distance_of_trip'] <- 'total_trip_dist'
 names(Arrivals)[names(Arrivals) == 'time_of_sample'] <- 'time_stamp'
 
 #view entire numerical values without a scientific format
-options(scipen=999)
+options(scipen = 999)
 
 #Convert epoch time (ms since 1/1/1970) to POSIXct; issues when using SQLite 
 Arrivals <- transform(Arrivals, tail_stop_arr_time = as_datetime(tail_stop_arr_time / 1000, tz = timezone),
@@ -194,11 +195,14 @@ Pred_Data_Cleaned <- Pred_Data_Cleaned %>%
 #Pred_Data_Cleaned %>% filter((is_express == F) & (is_invalid == F)) %>% 
 #                      write_csv(., "./cleaned_data/Valid_Local_Data.csv")
 
-rm(Arrivals)
+
 #connect to an external database and append to it the cleaned data
 drv <- dbDriver("SQLite")
 con <- dbConnect(drv, 'test.db', flags = SQLITE_RW)
 dbWriteTable(con, 'mta_bus_data', Pred_Data_Cleaned, append = TRUE)
-
+dbDisconnect(con)
+#clean up
+rm(c(Arrivals, Pred_Data_Cleaned))
+#time the data collection stage
 tend <- Sys.time()
 print(totalt <- tend - tstart)

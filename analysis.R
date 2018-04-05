@@ -1,32 +1,59 @@
 library(readr)      #required for faster file reading command
 library(stringr)
 library(dplyr)
-#Load cleaned data 
-Prediction_Data_Complete <- read_csv("./cleaned_data/Valid_Complete_Data.csv")
-Prediction_Data_Express <- read_csv("./cleaned_data/Valid_Express_Data.csv")
-Prediction_Data_Local <- read_csv("./cleaned_data/Valid_Local_Data.csv")
+library(RSQLite)
+library(tidyr)
+library(lubridate)  #epoch to posix_ct conversion
 
-#A problem with R^2 , though, is that it doesn’t follow a distribution.
-#We can’t compare the R^2 ’s in two models and know when one is
-#meaningfully better. Also, look at the variance of the residual distribution. 
-#If it is not constant, reevaluate the model. 
-#ALSM pg. 77 the farther we are from the sample mean the more Y-hat will wobble from sample to sample
-#Difference between E[Y] (expected value) and Y-hat (predicted value): https://stats.stackexchange.com/questions/328807/difference-between-predicted-value-and-expected-value-for-binary-model?utm_medium=organic&utm_source=google_rich_qa&utm_campaign=google_rich_qa
-#Remember, we assume that epsilon (error term), is normally distributed thus making Y a normal random variable 
-#our X's are not fixed. Do they vary and, if yes, by how much? ALSM pg. 66 effect on point estimator b1
-#The slope, B1, should be normally distributed with the regression line always going through point (X-bar, Y-bar) or (Sample X Mean, Sample Y mean) or mean of the fitted values?
-#The farther from (X-Bar, Y-Bar), the higher will be the variance of B1
-#MSE stands for error mean square or residual mean square Sum(Yi - Y-hat)^2/(n-2). SSE stands for error sum of squares or residual sum of squares Sum(Yi - Y-hat)^2
-#Linear regression models perfrom well within a range of predictor variables (Xi); outside this range, the relationship may not be linear
-#How do we establish this range for our predictors?
-#Even if the distriputions of Y are far from normal, the estimators b0 and b1
-#generally have the property of asymptotic normality - their distributions approach normality
-#under very general conditions as the sample size increases. CLT? Spacing of X affects the variance of b1 and b0. The larger the spacing the smaller this var of b1.
-#When we make inferences, our confidence bands widen, this is due to the fact that besides sample to sample variablity, 
-#we must account for variability between predictor variables (X)
-#High R^2 (coef. of determination) does NOT mean our predictions will be useful; for instance the confidence band around the prediction can be so wide as to make impractical 
-#The value taken by R2 in a given sample tends to be affected by the spacing of the X observations.
-#Correlation vs Causation: Regression models do not by themselves imply causation, even when R^2 is close to 1. Our analysis is observational. 
-#Be cautios when predicting outside the range of X variables obtained from data. Close is ok, far may be inappropriate. 
-#Our predictors are subject to measurement errors and are, hence, biased. Consult Ch. 4 of ALSM
-#Do our X and Y values come from a bivariate normal distribution?
+#set the timezone using IANA convention 
+timezone <- "America/New_York"
+#sig figures 
+options(scipen = 999)
+
+drv <- dbDriver("SQLite")
+con <- dbConnect(drv, 'test.db', flags = SQLITE_RO)
+Pred_Data_Complt <- dbGetQuery(con, "SELECT vehicle, time_stamp, stop_gtfs_seq, hist_cum, rece_cum, sche_cum,
+                                            predicted_t, measured_t
+                                     FROM mta_bus_data")
+dbDisconnect(con)
+
+Pred_Data_Complt <- transform(Pred_Data_Complt, time_stamp = as_datetime(as.double(time_stamp), tz = timezone))
+#bin and residual cutoffs in seconds 
+bin_cutoffs <- c(0, 120, 240, 360, 600, 900, 1200, Inf)
+res_cutoffs <- c(0, 60, 120, 240, 360, Inf)
+model_form <- formula(Pred_Data_Complt$measured_t ~ Pred_Data_Complt$hist_cum + Pred_Data_Complt$rece_cum + Pred_Data_Complt$sche_cum + 0)
+
+#use biglm if you run out of memory; lmtest library to test the model 
+Pred_Data_Complt$pred_bin <- cut(Pred_Data_Complt$predicted_t, cutoffs,  dig.lab = 5 )
+
+#calculate linear models for every subgroup 
+bin_lvl <- levels(Pred_Data_Complt$pred_bin)
+bin_names <- paste0((cutoffs[-length(cutoffs)]) / 60, " to ", (cutoffs[-1]) / 60)
+bin_metrics <- vector("list", length(bin_names))
+bin_metrics <- setNames(bins, bin_names)
+
+#takes a vector of coefficients and returns a vector of normalized coefficients 
+normalize_coef <- function(x) {
+  coef_sum <- sum(x)
+  x <- unlist(lapply(x, function(coef) {coef / coef_sum}))
+}
+
+bin_analyzer <- function(pred_bin) {
+  
+}
+
+
+
+for (bin in seq_along(bin_lvl)) {
+  bin_metrics[bin] <- vector("list", length = )
+  bin_metrics[bin] <- lm(model_form, subset(Pred_Data_Complt, pred_bin == bin_lvl[bin]))
+}
+
+
+
+
+
+
+
+
+
