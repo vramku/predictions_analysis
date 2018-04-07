@@ -146,7 +146,6 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
 
 #Set up a parallel backend for plyr::ddply
 registerDoParallel(cores = 3)      
-
 #Mark rows with invalid gtfs values and express routes
 Pred_Data_Cleaned <- plyr::ddply(Arrivals, .(time_stamp, vehicle), mark_invalid_stops, .parallel = TRUE)
 
