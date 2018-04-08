@@ -11,6 +11,8 @@ library(doParallel) #multicore processing for the plyr::ddply step
 timezone <- "America/New_York"
 #sig figures 
 options(scipen = 999)
+#Original Coefficients
+org_coef = c(0.4, 0.4, 0.2)
 
 drv <- dbDriver("SQLite")
 con <- dbConnect(drv, 'test.db', flags = SQLITE_RO)
@@ -18,10 +20,7 @@ Pred_Data_Complt <- dbGetQuery(con, "SELECT vehicle, time_stamp, stop_gtfs_seq, 
                                             predicted_t, measured_t
                                      FROM mta_bus_data")
 dbDisconnect(con)
-
 Pred_Data_Complt <- transform(Pred_Data_Complt, time_stamp = as_datetime(as.double(time_stamp), tz = timezone))
-#Original Coefficients
-org_coef = c(0.4, 0.4, 0.2)
 
 #bin and residual cutoffs in seconds 
 bin_cutoffs <- c(0, 120, 240, 360, 600, 900, 1200, Inf)
@@ -34,7 +33,7 @@ Pred_Data_Complt$pred_bin <- cut(Pred_Data_Complt$predicted_t, bin_cutoffs,  dig
 bin_lvl <- levels(Pred_Data_Complt$pred_bin)
 
 bin_names <- paste0((bin_cutoffs[-length(bin_cutoffs)]) / 60, " to ", (bin_cutoffs[-1]) / 60, " mins")
-res_names <- c(paste0((res_cutoffs[-length(res_cutoffs)]) / 60, " to ", (res_cutoffs[-1]) / 60, " mins"), "Total")
+res_names <- c(paste0((res_cutoffs[-length(res_cutoffs)]) / 60,  " to ", (res_cutoffs[-1]) / 60, " mins"), "Total")
 metric_names <- c("Bin_Str", "Coef_Matrix", "Optim_Model", "Metric_Matrix", "AbsRes_Matrix")
 mod_names <- c("Original", "Optimized", "Normalized")
 
@@ -84,10 +83,32 @@ calc_new_pred <- function(bin_df) {
   bin_df <- mutate(bin_df, a_res_norm = abs(bin_df$measured_t - bin_df$pred_t_norm))
 }
   
-cl <- makeCluster(detectCores() - 1)
-clusterExport(cl, "bin_metrics")
-registerDoParallel(cl)
+doParallel::registerDoParallel(detectCores() - 1)
 Pred_Data_Analyzed <- plyr::ddply(Pred_Data_Complt, .(pred_bin), calc_new_pred, .parallel = T)
-stopCluster(cl)
+
+res_funs <- list(sd = function(x) sd(as.numeric(x)), mean = function(x) mean(x), median = function(x) median(x))
+calc_metr <- function(bin_df) {
+  rows <- c("predicted_t", "pred_t_optim", "pred_t_norm")
+  rsds <- c("a_res_orig", "a_res_optim", "a_res_norm")
+  metr_mat <- matrix(nrow = 3, ncol = 4)
+  for (row in seq_along(rows)) { 
+    metr_mat[row, 1] <- cor(bin_df$measured_t, bin_df[rows[row]])^2 
+    for (cell in seq_along(metr_mat[row, 2:4])) {
+      metr_mat[row, (cell + 1)] <- res_funs[[cell]](bin_df[[rsds[row]]])
+    }
+  }
+  return(metr_mat)
+}
+
+doParallel::registerDoParallel(detectCores() - 1, "FORK")
+metr_mats <- vector('list', length = length(bin_lvl))
+bins <- split(Pred_Data_Analyzed, Pred_Data_Analyzed$pred_bin)
+metr_mats <- foreach(bin = seq_along(bins)) %dopar% {
+  calc_metr(bins[[bin]])
+}
+  
+   
 
 
+
+res_funs <- c(sd, mean, median)
