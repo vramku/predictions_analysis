@@ -67,9 +67,11 @@ calc_model <- function(bin_df) {
   bin_metrics[[bin_inx]][["Coef_Matrix"]]["Normalized",] <<- normalize_coef(optim_coef)
   return(bin_df)
 }
+
 #may rewrite as parMap with bin_metrics as return df and split Pred_Data as exported variable. 
 invisible(plyr::ddply(Pred_Data_Complt, .(pred_bin), calc_model))
 
+#redundant calculation of optim_residuals, the data is part of bin_metrics$Optim_Model; use it as a consistency check
 calc_new_pred <- function(bin_df) {
   bin_inx <- match(bin_df$pred_bin[1], names(bin_metrics))
   coef_matrix <- bin_metrics[[bin_inx]][["Coef_Matrix"]]
@@ -86,11 +88,12 @@ calc_new_pred <- function(bin_df) {
 doParallel::registerDoParallel(detectCores() - 1)
 Pred_Data_Analyzed <- plyr::ddply(Pred_Data_Complt, .(pred_bin), calc_new_pred, .parallel = T)
 
-res_funs <- list(sd = function(x) sd(as.numeric(x)), mean = function(x) mean(x), median = function(x) median(x))
+res_funs <- list(sd = function(x) sd(x), mean = function(x) mean(x), median = function(x) median(x))
 calc_metr <- function(bin_df) {
   rows <- c("predicted_t", "pred_t_optim", "pred_t_norm")
   rsds <- c("a_res_orig", "a_res_optim", "a_res_norm")
-  metr_mat <- matrix(nrow = 3, ncol = 4)
+  dim_names = (list(mod_names, c("R2 (Pearson)", "SD", "Mean", "Median")))
+  metr_mat <- matrix(nrow = 3, ncol = 4, dimnames = dim_names)
   for (row in seq_along(rows)) { 
     metr_mat[row, 1] <- cor(bin_df$measured_t, bin_df[rows[row]])^2 
     for (cell in seq_along(metr_mat[row, 2:4])) {
@@ -107,8 +110,23 @@ metr_mats <- foreach(bin = seq_along(bins)) %dopar% {
   calc_metr(bins[[bin]])
 }
   
-   
+for (bin in seq_along(bin_metrics)) {
+  bin_metrics[[bin]][["Metric_Matrix"]] <- metr_mats[[bin]]
+  
+}
 
+count_residuals <- function(bin_df) {
+  res_type <- c("a_res_orig", "a_res_optim", "a_res_norm")
+  res_matrix <- matrix(nrow = 3, ncol = length(res_names))
+  for (i in seq_along(res_type)) {
+    res_row <- unlist(table(cut(bin_df[[res_type[i]]], res_cutoffs)))
+    res_matrix <- rbind(c(res_row, sum(res_row)), res_matrix)
+  }
+  return(res_matrix[1:3,])
+}
 
+for (bin in seq_along(bins)) {
+  bin_metrics[[bin]][["AbsRes_Matrix"]][1:3,] <- count_residuals(bins[[bin]])
+}
 
-res_funs <- c(sd, mean, median)
+  
