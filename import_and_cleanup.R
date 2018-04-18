@@ -27,7 +27,7 @@ library(RSQLite)    #DBI framework for db access
 
 #set the timezone using IANA convention 
 timezone <- "America/New_York"
-#Read in the .csv file. 
+#Read in the .csv file. specify column types with colClasses for improved performance 
 #tryCatch constructions will help deal with any errors due to erroneous data. Will need to check for NAs
 Arrivals <- read_csv("raw_data/split_aa.csv")
 
@@ -37,20 +37,20 @@ names(Arrivals)[names(Arrivals) == 'stop_gtfs_sequence'] <- 'stop_gtfs_seq'
 names(Arrivals)[names(Arrivals) == 'distance_along_trip'] <- 'dist_covered'
 names(Arrivals)[names(Arrivals) == 'stop_distance_along_trip'] <- 'dist_from_origin'
 names(Arrivals)[names(Arrivals) == 'distance_of_trip'] <- 'total_trip_dist'
-names(Arrivals)[names(Arrivals) == 'time_of_sample'] <- 'time_stamp'
+names(Arrivals)[names(Arrivals) == 'time_of_sample'] <- 't_stamp'
 
 #view entire numerical values without a scientific format
 options(scipen = 999)
 
 #Convert epoch time (ms since 1/1/1970) to POSIXct; issues when using SQLite 
 Arrivals <- transform(Arrivals, tail_stop_arr_time = as_datetime(tail_stop_arr_time / 1000, tz = timezone),
-                                time_stamp = as_datetime(time_stamp / 1000, tz = timezone),
+                                t_stamp = as_datetime(t_stamp / 1000, tz = timezone),
                                 predicted_arrival = as_datetime(predicted_arrival / 1000, tz = timezone),
                                 service_date = as_datetime(service_date / 1000, tz = timezone))
 
 #Calculate Measured, Predicted and Residual times (timeToArrival and prediction in the old code)
-Arrivals$measured_t <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$time_stamp))
-Arrivals$predicted_t <-(as.double(Arrivals$predicted_arrival - Arrivals$time_stamp))
+Arrivals$t_measured <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$t_stamp))
+Arrivals$t_predicted <-(as.double(Arrivals$predicted_arrival - Arrivals$t_stamp))
 Arrivals$residual <- (as.double(Arrivals$tail_stop_arr_time - Arrivals$predicted_arrival)) #Possibly redundant. Consider taking abs of residual
 
 #Take the absolute values of the corresponding residual times:
@@ -60,8 +60,8 @@ Arrivals$abs_residual <- abs(Arrivals$residual)
 Arrivals$dist_covered <- round(Arrivals$dist_covered, digits = 2)
 Arrivals$dist_from_origin <- round(Arrivals$dist_from_origin, digits = 2)
 Arrivals$total_trip_dist <- round(Arrivals$total_trip_dist, digits = 2)
-Arrivals$measured_t <- round(Arrivals$measured_t, digits = 3)
-Arrivals$predicted_t <- round(Arrivals$predicted_t, digits = 3)
+Arrivals$t_measured <- round(Arrivals$t_measured, digits = 3)
+Arrivals$t_predicted <- round(Arrivals$t_predicted, digits = 3)
 Arrivals$abs_residual <- round(Arrivals$abs_residual, digits = 3)
 Arrivals$residual <- round(Arrivals$residual, digits = 3)
 
@@ -92,7 +92,7 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
   is_express <- str_detect(df[1, 'route'], rexpr)
   if (rows_in_df == 1) {(df$is_invalid[1] <- TRUE) & (df$is_express <- is_express) & return(df)}
   
-  #adjust the predicted_t of gtfs_seq 1 by prorating the first prediction time using the distance to the first stop
+  #adjust the t_predicted of gtfs_seq 1 by prorating the first prediction time using the distance to the first stop
   scalar <- (df$dist_from_origin[2] - df$dist_covered[2]) / (df$dist_from_origin[2] - df$dist_from_origin[1])
   df$historical[2] <- round(df$historical[2] <- df$historical[2] * scalar, digits = 3) 
   df$recent[2]     <- round(df$recent[2]     <- df$recent[2]     * scalar, digits = 3)
@@ -112,11 +112,11 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
   }
   
   #mark first record as invalid for our computational purposes and adjust component values based on predicted time
-  #since this is a weighted average, setting each component to the value of predicted_t ensures consistency of the following rows
+  #since this is a weighted average, setting each component to the value of t_predicted ensures consistency of the following rows
   #df$is_invalid[1] <- TRUE
-  #df$historical[1] <- df$predicted_t[1] 
-  #df$recent[1]     <- df$predicted_t[1]
-  #df$schedule[1]   <- df$predicted_t[1]
+  #df$historical[1] <- df$t_predicted[1] 
+  #df$recent[1]     <- df$t_predicted[1]
+  #df$schedule[1]   <- df$t_predicted[1]
 
   #continue checking for jumps if the bus is an express bus, else return
   if (!is_express) {return(df)}
@@ -147,44 +147,44 @@ mark_invalid_stops <- function (df, column = 'stop_gtfs_seq') {
 #Set up a parallel backend for plyr::ddply
 registerDoParallel(cores = 3)      
 #Mark rows with invalid gtfs values and express routes
-Pred_Data_Cleaned <- plyr::ddply(Arrivals, .(time_stamp, vehicle), mark_invalid_stops, .parallel = TRUE)
+Pred_Data_Cleaned <- plyr::ddply(Arrivals, .(t_stamp, vehicle), mark_invalid_stops, .parallel = TRUE)
 
 #Eliminate records classified as errors
 #Arrivals <- subset(Arrivals, measured_bins != "err")
-#Arrivals <- Arrivals %>% filter(measured_t >= 0)
+#Arrivals <- Arrivals %>% filter(t_measured >= 0)
 
 #for testing gtfs sequence skips 
 #df <- head(Arrivals, n = 10000)
-#df2 %>% group_by(time_stamp, route, vehicle) %>% summarize(stop_gtfs_sequence = paste(sort(unique(stop_gtfs_sequence)),collapse=", "))  
+#df2 %>% group_by(t_stamp, route, vehicle) %>% summarize(stop_gtfs_sequence = paste(sort(unique(stop_gtfs_sequence)),collapse=", "))  
 
 #Create columns showing to accumulated historical, recent and scheduled times for each report 
-Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(time_stamp, vehicle) %>% mutate(hist_cum = cumsum(historical),
+Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(t_stamp, vehicle) %>% mutate(hist_cum = cumsum(historical),
                                                                                    rece_cum = cumsum(recent),
                                                                                    sche_cum = cumsum(schedule))
 
-Pred_Data_Cleaned <- Pred_Data_Cleaned[c("vehicle", "time_stamp", "route", "historical", "recent", "schedule",
-                           "hist_cum", "rece_cum", "sche_cum", "predicted_t", "measured_t", "residual",
+Pred_Data_Cleaned <- Pred_Data_Cleaned[c("vehicle", "t_stamp", "route", "historical", "recent", "schedule",
+                           "hist_cum", "rece_cum", "sche_cum", "t_predicted", "t_measured", "residual",
                            "abs_residual", "stop_gtfs_seq", "phase", "direction",
                            "dist_covered", "dist_from_origin", "total_trip_dist", "depot", "is_express", "is_invalid",
                            "shape", "stop_id", "block", "service_date", "predicted_arrival", "tail_stop_arr_time")] 
 
 
-#filter groups that have zeros in either historical, recent, or sched times in valid rows or rows with measured_t < 0
-Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(time_stamp, vehicle) %>% 
+#filter groups that have zeros in either historical, recent, or sched times in valid rows or rows with t_measured < 0
+Pred_Data_Cleaned <- Pred_Data_Cleaned %>% group_by(t_stamp, vehicle) %>% 
                      filter(!any((near(historical, 0) && !is_invalid) | 
                                  (near(schedule, 0)   && !is_invalid) | 
                                  (near(recent, 0)     && !is_invalid))) %>%
-                     filter(measured_t >= 0) %>%
-                     arrange(time_stamp, vehicle)
+                     filter(t_measured >= 0) %>%
+                     arrange(t_stamp, vehicle)
 
-#remove anomalous values that have predicted_t values, which deviate by more than 0.5 from expected comp. calculation
+#remove anomalous values that have t_predicted values, which deviate by more than 0.5 from expected comp. calculation
 #the % of occurence of these anomalies is low and their removal should not significantly alter the data
 Pred_Data_Cleaned <- Pred_Data_Cleaned %>% 
-                     mutate(cpred = 0.4*hist_cum + 0.4*rece_cum + 0.2*sche_cum, delta = cpred - predicted_t) %>% 
-                     filter(abs(cpred - predicted_t) < 0.5) %>% subset(select = -c(cpred, delta))
+                     mutate(cpred = 0.4*hist_cum + 0.4*rece_cum + 0.2*sche_cum, delta = cpred - t_predicted) %>% 
+                     filter(abs(cpred - t_predicted) < 0.5) %>% subset(select = -c(cpred, delta))
 
 #primary key check
-#Pred_Data_Cleaned %>% count(time_stamp, vehicle, stop_gtfs_seq) %>% filter(n > 1)
+#Pred_Data_Cleaned %>% count(t_stamp, vehicle, stop_gtfs_seq) %>% filter(n > 1)
 #Release memory by deleting the redundant Arrivals object.
 #Save valid results to external .csv files
 #Pred_Data_Cleaned %>% filter(is_invalid == F) %>% 
@@ -201,7 +201,7 @@ con <- dbConnect(drv, 'test.db', flags = SQLITE_RW)
 dbWriteTable(con, 'mta_bus_data', Pred_Data_Cleaned, append = TRUE)
 dbDisconnect(con)
 #clean up
-rm(c(Arrivals, Pred_Data_Cleaned))
+rm(list = ls())
 #time the data collection stage
 tend <- Sys.time()
 print(totalt <- tend - tstart)
