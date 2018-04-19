@@ -8,7 +8,10 @@ library(lubridate)  #epoch to posix_ct conversion
 library(doParallel) #multicore processing for the plyr::ddply step
 library(data.table)
 library(ggplot2)
-
+source("BusData.R")
+#################################################
+#Data Import 
+#################################################
 #set the timezone using IANA convention 
 timezone <- "America/New_York"
 #sig figures 
@@ -29,18 +32,10 @@ get_pred_data <- function(con, is_express) {
     return(dbGetQuery(con, paste0(query, " WHERE is_express = ", is_express)))
   }
 } 
-
-Pred_Data_Cpt <- dbGetQuery(con, "SELECT vehicle, t_stamp, stop_gtfs_seq, hist_cum, rece_cum, sche_cum,
-                                            t_predicted, t_measured
-                                     FROM mta_bus_data")
-Pred_Data_Loc <- dbGetQuery(con, "SELECT vehicle, t_stamp, stop_gtfs_seq, hist_cum, rece_cum, sche_cum,
-                                            t_predicted, t_measured
-                                  FROM mta_bus_data
-                                  WHERE is_express = 0")
-Pred_Data_Exp <- dbGetQuery(con, "SELECT vehicle, t_stamp, stop_gtfs_seq, hist_cum, rece_cum, sche_cum,
-                                            t_predicted, t_measured
-                                  FROM mta_bus_data
-                                  WHERE is_express = 1")
+#second optional argument is a boolean is_express 
+Pred_Data_Cpt <- get_pred_data(con)
+Pred_Data_Loc <- get_pred_data(con, 0)
+Pred_Data_Exp <- get_pred_data(con, 1)
 dbDisconnect(con)
 
 #convert from epoch to PosixCt
@@ -49,7 +44,10 @@ Pred_Data_Cpt <- time_transform(Pred_Data_Cpt)
 Pred_Data_Loc <- time_transform(Pred_Data_Loc)
 Pred_Data_Exp <- time_transform(Pred_Data_Exp)
 
-#bin and residual cutoffs in seconds 
+########################################################
+#Data Analysis
+########################################################
+#bin and residual cutoffs in seconds
 bin_cutoffs <- c(0, 120, 240, 360, 600, 900, 1200, Inf)
 res_cutoffs <- c(0, 60, 120, 240, 360, Inf)
 
@@ -58,18 +56,18 @@ Pred_Data_Cpt$pred_bin <- cut(Pred_Data_Cpt$t_predicted, bin_cutoffs,  dig.lab =
 
 #calculate linear models for every prediction bin
 bin_lvl <- levels(Pred_Data_Cpt$pred_bin)
-
+#name arrays which we can refer back to when needed in analysis/plotting parts
 bin_names <- paste0((bin_cutoffs[-length(bin_cutoffs)]) / 60, " to ", (bin_cutoffs[-1]) / 60, " mins")
 res_names <- c(paste0((res_cutoffs[-length(res_cutoffs)]) / 60,  " to ", (res_cutoffs[-1]) / 60, " mins"), "Total")
 metric_names <- c("Bin_Str", "Coef_Matrix", "Optim_Model", "Metric_Matrix", "AbsRes_Matrix")
 mod_names <- c("Original", "Optimized", "Normalized")
 coef_names <- c("Historical", "Recent", "Schedule")
 meas_names <- c("R2 (Pearson)", "SD", "Mean", "Median")
-
+#memory allocation 
 bin_metrics <- vector("list", length(bin_lvl))
 bin_metrics <- setNames(bin_metrics, bin_lvl)
 
-#takes a vector of coefficients and returns a vector of normalized coefficients. might require mod to avoid name stripping
+#takes a vector of coefficients and returns a vector of normalized coefficients
 normalize_coef <- function(x) {
   coef_sum <- sum(x)
   x <- unlist(lapply(x, function(coef) {coef / coef_sum}))
@@ -170,9 +168,6 @@ for (bin in seq_along(bin_metrics)) {
 #convert the summary matrix to a data.table 
 dts <- as.data.table(summary_matrix, keep.rownames = T)
 dts <- dts[, lapply(.SD, function(x) round(as.numeric(x), 4)), by = .(Bin, rn)]
-
-
-
 
 #####################################################
 #Data Plotting 
