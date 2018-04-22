@@ -58,36 +58,37 @@ BusData <- R6Class(
       private$db_con <- db_con
       private$is_express <- is_express 
       private$route  <- route
-      private$orig_data <- private$read_from_db(db_con, is_express)
+      orig_data <- private$read_from_db(db_con, is_express)
+      
       #update bin if needed here
       #use biglm if you run out of memory; lmtest library to test the model 
       op_mod_form = formula(private$orig_data$t_measured ~ private$orig_data$hist_cum + 
                               private$orig_data$rece_cum + 
                               private$orig_data$sche_cum + 0)
       private$optim_model <- lm(op_mod_form, private$orig_data)
-      private$orig_data$pred_bin <- cut(private$orig_data$t_predicted, private$bin_cutoffs,  dig.lab = 5)
+      #orig_data$pred_bin <- cut(orig_data$t_predicted, private$bin_cutoffs,  dig.lab = 5)
+      orig_data[,':='(pred_bin = cut(orig_data$t_predicted, private$bin_cutoffs,  dig.lab = 5),
+                      abs_res = abs(t_measured - t_predicted))]
+      private$orig_data <- orig_data
       private$no_coef <- private$normalize_coef(coefficients(private$optim_model))
+      
+      
+      #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
       op_coef <- coefficients(private$optim_model)
       optm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
-      
-      #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
-      optm_data[,':='(t_pred_op = op_coef[[1]]*hist_cum + op_coef[[2]]*rece_cum + op_coef[[3]]*sche_cum)
-              ][,':='(pred_op_bin = cut(t_pred_op, private$bin_cutoffs,  dig.lab = 5))]
-      private$optm_data <- optm_data
-      optm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
-      #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
-      optm_data[,':='(t_pred_op = op_coef[[1]]*hist_cum + op_coef[[2]]*rece_cum + op_coef[[3]]*sche_cum)
+      #optimized data init.
+      optm_data[,':='(t_pred_op = op_coef[[1]] * hist_cum + op_coef[[2]] * rece_cum + op_coef[[3]] * sche_cum)
                 ][,':='(pred_op_bin = cut(t_pred_op, private$bin_cutoffs,  dig.lab = 5),
                         abs_op_res = abs(t_measured - t_pred_op))]
-                
-      
       private$optm_data <- optm_data
       
+      #normalized data init.
       norm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
       #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
-      norm_data[,':='(t_pred_no = private$no_coef[[1]]*hist_cum + 
-                                  private$no_coef[[2]]*rece_cum + private$no_coef[[3]]*sche_cum)
-                ][,':='(pred_no_bin = cut(t_pred_op, private$bin_cutoffs,  dig.lab = 5))]
+      norm_data[,':='(t_pred_no = private$no_coef[[1]] * hist_cum + 
+                                  private$no_coef[[2]] * rece_cum + private$no_coef[[3]] * sche_cum)
+                ][,':='(pred_no_bin = cut(t_pred_no, private$bin_cutoffs,  dig.lab = 5),
+                        abs_no_res = abs(t_measured - t_pred_no))]
       private$norm_data <- norm_data
       
       
