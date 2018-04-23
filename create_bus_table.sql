@@ -1,7 +1,7 @@
 CREATE TABLE mta_bus_data
 (
     vehicle                INTEGER     NOT NULL, 
-    time_stamp             TEXT        NOT NULL,
+    t_stamp                TEXT        NOT NULL,
     route                  TEXT,
     historical             FLOAT,
     recent                 FLOAT,
@@ -9,8 +9,8 @@ CREATE TABLE mta_bus_data
     hist_cum               FLOAT,
     rece_cum               FLOAT,
     sche_cum               FLOAT,
-    predicted_t            FLOAT,
-    measured_t             FLOAT       CHECK(measured_t >= 0),
+    t_predicted            FLOAT,
+    t_measured             FLOAT       CHECK(t_measured >= 0),
     residual               FLOAT,
     abs_residual           FLOAT       CHECK(abs_residual >= 0),
     stop_gtfs_seq          INTEGER,
@@ -29,6 +29,6 @@ CREATE TABLE mta_bus_data
     predicted_arrival      FLOAT,
     tail_stop_arr_time     FLOAT,
 
-    PRIMARY KEY(vehicle, time_stamp, stop_gtfs_seq)
+    PRIMARY KEY(vehicle, t_stamp, stop_gtfs_seq)
 );
 
