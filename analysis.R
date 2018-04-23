@@ -173,7 +173,7 @@ dts <- dts[, lapply(.SD, function(x) round(as.numeric(x), 4)), by = .(Bin, rn)]
 #Data Plotting 
 #####################################################
 #Prepare data for faceted plotting using ggplot2
-Pred_Data_ResMolt <- melt(Pred_Data_Analyzed, id.vars = c(1:9,11,13))
+Pred_Data_ResMolt <- melt(Pred_Data_Analyzed, id.vars = c(1:12,14,16))
 Pred_Data_ResMolt <- as.data.table(Pred_Data_ResMolt)
 Pred_Data_ResMolt <- Pred_Data_ResMolt %>% mutate(facet = ifelse(.$variable == "a_res_orig", "Original", 
                                                                   ifelse(.$variable == "a_res_optim", "Optimized",

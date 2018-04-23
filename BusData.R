@@ -23,6 +23,9 @@ BusData <- R6Class(
     q_fields = c("vehicle", "t_stamp", "stop_gtfs_seq", "hist_cum", "rece_cum", "sche_cum", 
                  "t_predicted", "t_measured", "route", "depot", "is_express"),
     q_table  = "mta_bus_data",
+    #Matrices for Results
+    dim_names = (list(mod_names, c("R2 (Pearson)", "SD", "Mean", "Median"))),
+    metr_mat <- matrix(nrow = 3, ncol = 4, dimnames = dim_names),
     ################################################################################################
     #Private Functions
     ################################################################################################
@@ -42,6 +45,7 @@ BusData <- R6Class(
       x <- unlist(lapply(x, function(coef) {coef / coef_sum}))
     }
     ),
+  
    public = list(
     ############################################################
     #Public Interface 
@@ -84,7 +88,6 @@ BusData <- R6Class(
       
       #normalized data init.
       norm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
-      #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
       norm_data[,':='(t_pred_no = private$no_coef[[1]] * hist_cum + 
                                   private$no_coef[[2]] * rece_cum + private$no_coef[[3]] * sche_cum)
                 ][,':='(pred_no_bin = cut(t_pred_no, private$bin_cutoffs,  dig.lab = 5),
