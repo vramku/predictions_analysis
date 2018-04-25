@@ -26,12 +26,12 @@ BusData <- R6Class(
                  "t_predicted", "t_measured", "route", "depot", "is_express"),
     q_table  = "mta_bus_data",
     #Matrices for Results
-    mod_names = c("Original", "Optimized", "Normalized"),
-    bin_metric = NULL,
+    bin_summaries = NULL,
     res_names = NULL,
     #Name Vectors 
-    meas_names <- c("R2 (Pearson)", "SD", "Mean", "Median"),
-    
+    meas_names = c("R2 (Pearson)", "SD", "Mean", "Median"),
+    coef_names = c("Historical", "Recent", "Schedule"),
+    mod_names = c("Original", "Optimized", "Normalized"),
     ################################################################################################
     #Private Functions
     ################################################################################################
@@ -109,12 +109,12 @@ BusData <- R6Class(
       num_of_bins = length(private$bin_cutoffs) - 1
       dim_names = (list(private$mod_names, c("R2 (Pearson)", "SD", "Mean", "Median")))
       #bmat_lst <- vector('list', length = 2)
-      bin_metric <- matrix(rep(vector('list'), times = num_of_bins * 3), nrow = 3, ncol = num_of_bins,
-                           dimnames = list(private$mod_names, bin_names))
-      for (i in 1:nrow(bin_metric)) {
-        for (j in 1:ncol(bin_metric)) {
+      bin_summaries <- matrix(rep(vector('list'), times = num_of_bins * 3), nrow = 3, ncol = num_of_bins, 
+                              dimnames = list(private$mod_names, bin_names))
+      for (i in 1:nrow(bin_summaries)) {
+        for (j in 1:ncol(bin_summaries)) {
           named_bmat_lst <- list(Metric_Matrix = NULL, Residual_Matrix = NULL)
-          bin_metric[i,j][[1]] <- named_bmat_lst
+          bin_summaries[i,j][[1]] <- named_bmat_lst
         }
       }
       
@@ -151,31 +151,31 @@ BusData <- R6Class(
         return(res_matrix)
       }
 
-      # bin_metric <- foreach(col = seq_len(ncol(bin_metric)), .combine='cbind') %:%
-      #                   foreach(row = seq_len(nrow(bin_metric)), .combine='c') %do% {
+      # bin_summaries <- foreach(col = seq_len(ncol(bin_summaries)), .combine='cbind') %:%
+      #                   foreach(row = seq_len(nrow(bin_summaries)), .combine='c') %do% {
       #                       #metric_lst <- calc_metr(pred_grp_mat[row, col])
-      #                       #bin_metric[row, col][1] <- metric_lst
-      #                       #bin_metric[row, col]
+      #                       #bin_summaries[row, col][1] <- metric_lst
+      #                       #bin_summaries[row, col]
       #                       print(row)
       #                       print(col)
       #                   }
       
-      for (i in seq_len(nrow(bin_metric))) {
-        for (j in seq_len(ncol(bin_metric))) {
+      for (i in seq_len(nrow(bin_summaries))) {
+        for (j in seq_len(ncol(bin_summaries))) {
           pred_bin_for_mod <- pred_grp_mat[i, j][[1]]
           metric_mat <- calc_metr(pred_bin_for_mod)
           resid_mat <- count_residuals(pred_bin_for_mod)
-          bin_metric[i,j][[1]][[1]] <- metric_mat
-          bin_metric[i,j][[1]][[2]] <- resid_mat
+          bin_summaries[i,j][[1]][[1]] <- metric_mat
+          bin_summaries[i,j][[1]][[2]] <- resid_mat
         }
       }
       #Save the summary matrix for bins. Each cell is a two member list containing metric and residual matrices.
-      private$bin_metric <- bin_metric
+      private$bin_summaries <- bin_summaries
       sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
-      sum_mat_col_names <- (private$res_names, private$meas_names)
-      Summary_matrix <- matrix(ncol = 14, nrow = length(bin_metrics) * 3, dimnames = list(rep(mod_names, times = length(bin_metrics)), 
-                                                                                         c(res_names, meas_names, coef_names, "Bin")))
-      
+      sum_mat_col_names <- c("Bin", private$coef_names, private$res_names, private$meas_names)
+      summary_matrix <- matrix(ncol = length(sum_mat_col_names), nrow = length(bin_summaries), 
+                               dimnames = list(sum_mat_row_names, sum_mat_col_names))
+      print(summary_matrix)
      },
     get_q_fields = function() {
       print(private$q_fields)
@@ -192,8 +192,8 @@ BusData <- R6Class(
     get_op_mod = function() {
       private$optim_model
     },
-    get_bin_metric = function() {
-      private$bin_metric
+    get_bin_summaries = function() {
+      private$bin_summaries
     }
    
    )
