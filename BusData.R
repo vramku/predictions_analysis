@@ -13,9 +13,11 @@ BusData <- R6Class(
     orig_data   = NULL,
     optm_data   = NULL,
     norm_data   = NULL, 
-    org_coef    = c(0.4, 0.4, 0.2), #coefficients used by the BusTime model
+    #coefficients and model specific parameters
+    org_coef    = c(0.4, 0.4, 0.2),               #coefficients used by the BusTime model
     no_coef     = "double",
     optim_model = vector("list", length = 12),
+    bin_lvl     = NULL,                           #factor levels for prediction bins
     #bin and residual cutoffs in seconds
     bin_cutoffs = c(0, 120, 240, 360, 600, 900, 1200, Inf),
     res_cutoffs = c(0, 60, 120, 240, 360, Inf),
@@ -26,6 +28,10 @@ BusData <- R6Class(
     #Matrices for Results
     mod_names = c("Original", "Optimized", "Normalized"),
     bin_metric = NULL,
+    res_names = NULL,
+    #Name Vectors 
+    meas_names <- c("R2 (Pearson)", "SD", "Mean", "Median"),
+    
     ################################################################################################
     #Private Functions
     ################################################################################################
@@ -56,31 +62,33 @@ BusData <- R6Class(
       print(private$no_coef)
       
     },
-    #constructor data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
+    #constructor: data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
     initialize = function(db_con, is_express = NULL, route = NULL) {
       #save arguments 
-      
+      private$res_names <- c(paste0((res_cutoffs[-length(res_cutoffs)]) / 60,  " to ", (res_cutoffs[-1]) / 60, " mins"), "Total")
       private$db_con <- db_con
       private$is_express <- is_express 
       private$route  <- route
       orig_data <- private$read_from_db(db_con, is_express)
     
-      #update bin if needed here
+      #update bins here if needed 
       #use biglm if you run out of memory; lmtest library to test the model 
       op_mod_form = formula(private$orig_data$t_measured ~ private$orig_data$hist_cum + 
                               private$orig_data$rece_cum + 
                               private$orig_data$sche_cum + 0)
       private$optim_model <- lm(op_mod_form, private$orig_data)
+      
       #bin original data and calculate absolute values of residuals for each row
       orig_data[,':='(pred_bin = cut(orig_data$t_predicted, private$bin_cutoffs,  dig.lab = 5),
                       abs_res = abs(t_measured - t_predicted))]
       private$orig_data <- orig_data
       private$no_coef <- private$normalize_coef(coefficients(private$optim_model))
-      
+      private$bin_lvl <- levels(private$orig_data$pred_bin)
       
       #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
       op_coef <- coefficients(private$optim_model)
       optm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
+      
       #optimized data init.
       optm_data[,':='(t_predicted = op_coef[[1]] * hist_cum + op_coef[[2]] * rece_cum + op_coef[[3]] * sche_cum)
                 ][,':='(pred_bin = cut(t_predicted, private$bin_cutoffs,  dig.lab = 5),
@@ -96,51 +104,53 @@ BusData <- R6Class(
       private$norm_data <- norm_data
       
       #initialize the matrix for storing bin metrics using number of models and number of bins
+      #this is a matrix of lists where elements should be accessed using the [[]] operator
+      #for more information consult R's documentation on [] vs [[]]
       num_of_bins = length(private$bin_cutoffs) - 1
       dim_names = (list(private$mod_names, c("R2 (Pearson)", "SD", "Mean", "Median")))
-      bin_metric <- matrix(rep(vector('list', num_of_bins), times = num_of_bins * 3), nrow = 3, ncol = num_of_bins)
+      #bmat_lst <- vector('list', length = 2)
+      bin_metric <- matrix(rep(vector('list'), times = num_of_bins * 3), nrow = 3, ncol = num_of_bins,
+                           dimnames = list(private$mod_names, bin_names))
+      for (i in 1:nrow(bin_metric)) {
+        for (j in 1:ncol(bin_metric)) {
+          named_bmat_lst <- list(Metric_Matrix = NULL, Residual_Matrix = NULL)
+          bin_metric[i,j][[1]] <- named_bmat_lst
+        }
+      }
+      
       res_funs <- list(sd = function(x) sd(x), mean = function(x) mean(x), median = function(x) median(x))
       pred_grp_mat <- matrix(rep(vector('list'), times = num_of_bins * 3), nrow = 3, ncol = num_of_bins)
       mod_data_refs <- list(private$orig_data, private$optm_data, private$norm_data)
-      print(bin_metric)
-      #print(mod_data_refs[[2]]$pred_bin)
-      #print(typeof(mod_data_refs[[2]]))
-      #pred_gr_mat[2,] <- split(mod_data_refs[[2]], mod_data_refs[[2]]$pred_bin)
-      #print(pred_gr_mat)
       
-      for(i in 1:length(mod_data_refs)) {
+      
+      for (i in 1:length(mod_data_refs)) {
         pred_grp_mat[i,] <- split(mod_data_refs[[i]], mod_data_refs[[i]]$pred_bin)
       }
-      print(pred_grp_mat[3,1])
-      print(pred_grp_mat[2,3])
-      
+      #Function accepts a prediction bin and computes metrics such as the
+      #Pearson Correlation Coefficient and Standard Deviation of the residuals
       calc_metr <- function(bin_dt) {
-        lst_names = c("R2 (Pearson)", "SD", "Mean", "Median")
-        metr_lst <- vector('list', length = length(lst_names))
-        metr_lst[[1]] <- cor(bin_dt$t_measured, bin_dt$t_predicted)^2
+        dim_names = list(c("Residual Metric"), c("R2 (Pearson)", "SD", "Mean", "Median"))
+        metr_mat <- matrix(nrow = 1, ncol = 4, dimnames = dim_names)
+        metr_mat[1,1] <- cor(bin_dt$t_measured, bin_dt$t_predicted)^2
         
-        for (e in 2:length(metr_lst)) {
-            metr_lst[[e]] <- res_funs[[e - 1]](bin_dt$abs_res)
+        for (inx in 2:length(metr_mat)) {
+            metr_mat[1,inx] <- res_funs[[inx - 1]](bin_dt$abs_res)
           }
         
-        return(metr_lst)
+        return(metr_mat)
       }
-      
-      count_residuals <- function(bin_df) {
-        res_type <- c("a_res_orig", "a_res_optim", "a_res_norm")
-        res_matrix <- matrix(nrow = 3, ncol = length(res_names))
-        for (i in seq_along(res_type)) {
-          res_row <- unlist(table(cut(bin_df[[res_type[i]]], res_cutoffs)))
-          res_matrix <- rbind(c(res_row, sum(res_row)), res_matrix)
-        }
-        return(res_matrix[1:3,])
+
+      #Function accepts a prediction bin, and calculates and bins the residuals
+      count_residuals <- function(bin_dt) {
+        dim_names <- (list("Count", private$res_names))
+        res_matrix <- matrix(nrow = 1, ncol = length(private$res_names))
+        res_row <- unlist(table(cut(bin_dt$abs_res, res_cutoffs)))
+        res_matrix <- rbind(c(res_row, sum(res_row)))
+        dimnames(res_matrix) <- dim_names
+ 
+        return(res_matrix)
       }
-      
-      # cr_list <- function() {
-      #   met_mat <- 
-      # }
-      # 
-      # 
+
       # bin_metric <- foreach(col = seq_len(ncol(bin_metric)), .combine='cbind') %:%
       #                   foreach(row = seq_len(nrow(bin_metric)), .combine='c') %do% {
       #                       #metric_lst <- calc_metr(pred_grp_mat[row, col])
@@ -149,18 +159,22 @@ BusData <- R6Class(
       #                       print(row)
       #                       print(col)
       #                   }
-      for(i in seq_len(nrow(bin_metric))) {
-        for(j in seq_len(ncol(bin_metric))) {
-          metric_lst <- calc_metr(pred_grp_mat[i, j][[1]])
-          print(j)
-          print(metric_lst)
-          #bin_metric[row, col][1] <- metric_lst
-          print(bin_metric[i,j])
+      
+      for (i in seq_len(nrow(bin_metric))) {
+        for (j in seq_len(ncol(bin_metric))) {
+          pred_bin_for_mod <- pred_grp_mat[i, j][[1]]
+          metric_mat <- calc_metr(pred_bin_for_mod)
+          resid_mat <- count_residuals(pred_bin_for_mod)
+          bin_metric[i,j][[1]][[1]] <- metric_mat
+          bin_metric[i,j][[1]][[2]] <- resid_mat
         }
       }
-      print(bin_metric)
+      #Save the summary matrix for bins. Each cell is a two member list containing metric and residual matrices.
       private$bin_metric <- bin_metric
-      
+      sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
+      sum_mat_col_names <- (private$res_names, private$meas_names)
+      Summary_matrix <- matrix(ncol = 14, nrow = length(bin_metrics) * 3, dimnames = list(rep(mod_names, times = length(bin_metrics)), 
+                                                                                         c(res_names, meas_names, coef_names, "Bin")))
       
      },
     get_q_fields = function() {
