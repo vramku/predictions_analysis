@@ -42,9 +42,20 @@ count_residuals <- function(bin_dt, lvl) {
   res_matrix <- matrix(nrow = 1, ncol = length(res_names))
   res_row <- as.vector(table(cut(bin_dt$a_res_orig, res_cutoffs)))
   per_row <- round(purrr::map2_dbl(res_row, sum(res_row), function(x,y) (x/y * 100)), digits = 2)
-  print(str_c(res_row, " (", per_row, "%)" sep = ""))
-  res_matrix <- rbind(c(res_row, sum(res_row)))
+  fus_row <- (str_c(res_row, " (", per_row, "%)", sep = ""))
+  res_matrix <- rbind(c(fus_row, as.character(sum(res_row))))
   dimnames(res_matrix) <- dim_names
   
   return(res_matrix)
+}
+
+for (i in 1:ncol(binsums)) {
+  for (j in 1:nrow(binsums)) {
+    print(i + j - 1)
+    cell_to_insert <- binsums[j,i][[1]]
+    buf_vec <- c(bin_lvl[[i]], coefs[[j]], as.vector(cell_to_insert[[2]]), round(as.vector(cell_to_insert[[1]]), digits = 3))
+    summ_t[i*j,] <- buf_vec
+    #print(rbind(bin_lvl[[i]], coefs[[j]], as.vector(cell_to_insert[[2]]), as.vector(cell_to_insert[[1]])))
+    #summary_matrix[i*j, ] <- cbind(bin_lvl[[i]], coef_list[[j]], cell_to_insert[[2]], cell_to_insert[[1]])
+  }
 }
