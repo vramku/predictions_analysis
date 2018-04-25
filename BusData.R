@@ -8,6 +8,9 @@ BusData <- R6Class(
   "BusData",
   # Define the attributes 
   private = list(
+    #############################################################################################
+    #Private Attribues
+    #############################################################################################
     db_con      = "S4",
     route       = "character",
     is_express  = "integer",
@@ -30,6 +33,7 @@ BusData <- R6Class(
     bin_summaries = NULL,
     res_names     = NULL,
     summ_dt       = NULL, 
+    form_summ_dt  = NULL, 
     #Name Vectors 
     meas_names = c("R2 (Pearson)", "SD", "Mean", "Median"),
     coef_names = c("Historical", "Recent", "Schedule"),
@@ -58,9 +62,6 @@ BusData <- R6Class(
     ############################################################
     #Public Interface 
     ############################################################
-    
-    
-    
     print = function() {
       cat("BusData Elements:\n", private$is_express, private$route, "\n")
       print(private$db_con)
@@ -70,7 +71,7 @@ BusData <- R6Class(
     #constructor: data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
     initialize = function(db_con, is_express = NULL, route = NULL) {
       #save arguments 
-      private$res_names <- c(paste0((private$res_cutoffs[-length(private$res_cutoffs)]) / 60,  "to", (private$res_cutoffs[-1]) / 60, "mins"), "Total")
+      private$res_names <- c(paste0((private$res_cutoffs[-length(private$res_cutoffs)]) / 60,  " to ", (private$res_cutoffs[-1]) / 60, " mins"), "Total")
       private$db_con <- db_con
       private$is_express <- is_express 
       private$route  <- route
@@ -155,13 +156,12 @@ BusData <- R6Class(
       }
 
       #Function accepts a prediction bin, and calculates and bins the residuals
-      count_residuals <- function(bin_dt, lvl) {
+      count_residuals <- function(bin_dt, lvl, percent = FALSE) {
         dim_names <- (list(private$bin_lvl[[lvl]], private$res_names))
         res_matrix <- matrix(nrow = 1, ncol = length(private$res_names))
         res_row <- unlist(table(cut(bin_dt$abs_res, private$res_cutoffs)))
         res_matrix <- rbind(c(res_row, sum(res_row)))
         dimnames(res_matrix) <- dim_names
- 
         return(res_matrix)
       }
       
@@ -174,29 +174,52 @@ BusData <- R6Class(
           bin_summaries[i,j][[1]][[2]] <- resid_mat
         }
       }
-      ########################################################################################################
-      #Summary Table Creation
-      ########################################################################################################
       #Save the summary matrix for bins. Each cell is a two member list containing metric and residual matrices.
       private$bin_summaries <- bin_summaries
-      #Create a summary table using information from the summary matrix, the models and the bin factors
-      sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
-      sum_mat_col_names <- c("Bin", private$coef_names, private$res_names, private$meas_names)
-      summary_matrix <- matrix(nrow = length(bin_summaries), ncol = length(sum_mat_col_names))
-      #start the row counter and build the table by looping through the summary matrix
-      row_num <- 1
-      for (i in 1:ncol(bin_summaries)) {
-        for (j in 1:nrow(bin_summaries)) {
-          cell_to_insert <- bin_summaries[j,i][[1]]
-          buf_vec <- c(private$bin_lvl[[i]], private$coef_list[[j]], as.vector(cell_to_insert[[2]]), round(as.vector(cell_to_insert[[1]]), digits = 3))
-          summary_matrix[row_num,] <- buf_vec
-          row_num <- row_num + 1
-        }
-      }
-      dimnames(summary_matrix) <- list(sum_mat_row_names, sum_mat_col_names)
-      private$summ_dt <- as.data.table(summary_matrix)
+      ######################################################################################################
+      #Table Creation
+      ######################################################################################################
+      make_table <- function(percent = FALSE) { 
+        #Create a summary table using information from the summary matrix, the models and the bin factors
+        sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
+        sum_mat_col_names <- c("Bin", private$coef_names, private$res_names, private$meas_names)
+        summary_matrix <- matrix(nrow = length(bin_summaries), ncol = length(sum_mat_col_names))
+        #start the row counter and build the table by looping through the summary matrix
+        row_num <- 1
+        for (i in 1:ncol(bin_summaries)) {
+          for (j in 1:nrow(bin_summaries)) {
+            cell_to_insert <- bin_summaries[j,i][[1]]
     
-      },
+            get_resids <- function() {
+              if (percent) {
+                #dim_names <- (list(bin_lvl[[i]], private$res_names))
+                num_vec <- as.vector(cell_to_insert[[2]])
+                per_vec <- round(purrr::map2_dbl(num_vec[-length(num_vec)], num_vec[length(num_vec)], function(x,y) (x/y * 100)), digits = 2)
+                fus_vec <- (str_c(num_vec[-length(num_vec)], " (", per_vec, "%)", sep = ""))
+                form_resids <- rbind(c(fus_vec, as.character(num_vec[length(num_vec)])))
+                #dimnames(form_resids) <- dim_names
+                return(form_resids)
+              } else {
+                return(as.vector(cell_to_insert[[2]]))
+              }
+            }
+            buf_vec <- c(private$bin_lvl[[i]], private$coef_list[[j]], get_resids(), round(as.vector(cell_to_insert[[1]]), digits = 3))
+            print(buf_vec)
+            summary_matrix[row_num,] <- buf_vec
+            row_num <- row_num + 1
+          }
+        }
+        dimnames(summary_matrix) <- list(sum_mat_row_names, sum_mat_col_names)
+        return(table <- as.data.table(summary_matrix, keep.rownames = TRUE))
+      }
+      
+      #Summary Table
+      private$summ_dt <- make_table()
+      #Formatted Summary Table Creation
+      private$form_summ_dt <- make_table(percent = TRUE)
+      
+      
+    },
     get_q_fields = function() {
       print(private$q_fields)
     },
@@ -223,6 +246,9 @@ BusData <- R6Class(
     },
     get_summary_table = function() {
       private$summ_dt
+    },
+    get_formatted_summ_table = function() {
+      private$form_summ_dt
     }
    
    )
