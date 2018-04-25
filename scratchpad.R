@@ -40,8 +40,9 @@ func3 <- function(dt) {
 count_residuals <- function(bin_dt, lvl) {
   dim_names <- (list(bin_lvl[[lvl]], res_names))
   res_matrix <- matrix(nrow = 1, ncol = length(res_names))
-  res_row <- unlist(table(cut(bin_dt$a_res_orig, res_cutoffs)))
-  res_row <- lapply(res_row[-length(res_row)], function(x) x^2)
+  res_row <- as.vector(table(cut(bin_dt$a_res_orig, res_cutoffs)))
+  per_row <- round(purrr::map2_dbl(res_row, sum(res_row), function(x,y) (x/y * 100)), digits = 2)
+  print(str_c(res_row, " (", per_row, "%)" sep = ""))
   res_matrix <- rbind(c(res_row, sum(res_row)))
   dimnames(res_matrix) <- dim_names
   
