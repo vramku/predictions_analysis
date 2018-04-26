@@ -3,6 +3,7 @@ library(RSQLite)
 library(stringr)
 library(data.table)
 library(lubridate)
+library(MASS)
 BusData <- R6Class(
   # Set the name for the class; figure out how to chain method calls for in place data manipulation 
   "BusData",
@@ -16,11 +17,13 @@ BusData <- R6Class(
     is_express  = "integer",
     #tables for the basic, fitted and fitted-normalized models
     orig_data   = NULL,
-    optm_data   = NULL,
-    norm_data   = NULL, 
+    lsft_data   = NULL,
+    norm_data   = NULL,
+    rbst_data   = NULL,
     #coefficients and model specific parameters
-    coef_list   = vector('list', length = 3),
-    optim_model = vector("list", length = 12),
+    coef_list   = vector('list', length = 4),
+    lsfit_mod   = vector("list", length = 12),
+    robust_mod  = NULL, 
     bin_lvl     = NULL,                           #factor levels for prediction bins
     #bin and residual cutoffs in seconds
     bin_cutoffs = c(0, 120, 240, 360, 600, 900, 1200, Inf),
@@ -55,9 +58,16 @@ BusData <- R6Class(
     normalize_coef = function(x) {
       coef_sum <- sum(x)
       x <- unlist(lapply(x, function(coef) {coef / coef_sum}))
+    },
+    create_mod_dt = function(orig_dt, applied_mod = NULL, mcoefs = NULL) {
+      if (is.null(mcoefs)) mcoefs <- as.vector(coefficients(applied_mod))
+      new_dt <- orig_dt[, !c("t_predicted", "pred_bin"), with = FALSE]
+      new_dt[,':='(t_predicted = mcoefs[1] * hist_cum + mcoefs[2] * rece_cum + mcoefs[3] * sche_cum)
+             ][,':='(pred_bin = cut(t_predicted, private$bin_cutoffs,  dig.lab = 5),
+                     abs_res = abs(t_measured - t_predicted))]
     }
     ),
-  
+    
    public = list(
     ############################################################
     #Public Interface 
@@ -75,7 +85,7 @@ BusData <- R6Class(
       private$db_con <- db_con
       private$is_express <- is_express 
       private$route  <- route
-      orig_data <- private$read_from_db(db_con, is_express)
+      orig_data <-  private$read_from_db(db_con, is_express)
       orig_coef <- c(0.4, 0.4, 0.2)
       private$coef_list[[1]] <- orig_coef
       #####################################################################################
@@ -86,34 +96,24 @@ BusData <- R6Class(
       op_mod_form = formula(private$orig_data$t_measured ~ private$orig_data$hist_cum + 
                               private$orig_data$rece_cum + 
                               private$orig_data$sche_cum + 0)
-      private$optim_model <- lm(op_mod_form, private$orig_data)
-      private$coef_list[[2]] <- round(as.vector(private$optim_model$coefficients), digits = 3)
+      #Least Squares Linear Model
+      private$lsfit_mod <- lm(op_mod_form, private$orig_data)
+      private$coef_list[[2]] <- round(as.vector(private$lsfit_mod$coefficients), digits = 3)
+      private$coef_list[[3]] <- round(as.vector(private$normalize_coef(coefficients(private$lsfit_mod))), digits = 3)
+      #Robust Linear Model
+      private$robust_mod <- rlm(op_mod_form, private$orig_data)
+      private$coef_list[[4]] <- round(as.vector(private$robust_mod$coefficients), digits = 3)
+      
       #bin original data and calculate absolute values of residuals for each row
       orig_data[,':='(pred_bin = cut(orig_data$t_predicted, private$bin_cutoffs,  dig.lab = 5),
                       abs_res = abs(t_measured - t_predicted))]
       private$orig_data <- orig_data
-      no_coef <- private$normalize_coef(coefficients(private$optim_model))
       private$bin_lvl <- levels(private$orig_data$pred_bin)
       
-      #calculate new prediction times using optimized and normalized coef. and bin them 1=h 2=r 3=s
-      op_coef <- coefficients(private$optim_model)
-      optm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
-      
-      #optimized data init.
-      optm_data[,':='(t_predicted = op_coef[[1]] * hist_cum + op_coef[[2]] * rece_cum + op_coef[[3]] * sche_cum)
-                ][,':='(pred_bin = cut(t_predicted, private$bin_cutoffs,  dig.lab = 5),
-                        abs_res = abs(t_measured - t_predicted))]
-      private$optm_data <- optm_data
-      
-      #normalized data init.
-      no_coef <- private$normalize_coef(coefficients(private$optim_model))
-      private$coef_list[[3]] <- round(as.vector(no_coef), digits = 3)
-      norm_data <- private$orig_data[, !c("t_predicted", "pred_bin"), with = FALSE]
-      norm_data[,':='(t_predicted = no_coef[[1]] * hist_cum + 
-                                  no_coef[[2]] * rece_cum + no_coef[[3]] * sche_cum)
-                ][,':='(pred_bin = cut(t_predicted, private$bin_cutoffs,  dig.lab = 5),
-                        abs_res = abs(t_measured - t_predicted))]
-      private$norm_data <- norm_data
+      #calculate new prediction times using optimized, normalized and robust coef. 1=h 2=r 3=s
+      private$lsft_data <- private$create_mod_dt(orig_data, private$lsfit_mod)
+      private$norm_data <- private$create_mod_dt(orig_data,  mcoefs = private$coef_list[[3]])
+      private$rbst_data <- private$create_mod_dt(orig_data, private$robust_mod)
       
       #####################################################################################
       #Bin Group Analysis
@@ -135,12 +135,11 @@ BusData <- R6Class(
       #split data into groups by prediction time bins. each matrix element represents a group
       res_funs <- list(sd = function(x) sd(x), mean = function(x) mean(x), median = function(x) median(x))
       pred_grp_mat <- matrix(rep(vector('list'), times = num_of_bins * 3), nrow = 3, ncol = num_of_bins)
-      mod_data_refs <- list(private$orig_data, private$optm_data, private$norm_data)
+      mod_data_refs <- list(private$orig_data, private$lsft_data, private$norm_data)
       for (i in 1:length(mod_data_refs)) {
         pred_grp_mat[i,] <- split(mod_data_refs[[i]], mod_data_refs[[i]]$pred_bin)
       }
-      
-      print(pred_grp_mat[1,1])
+
       #Function accepts a prediction bin and computes metrics such as the
       #Pearson Correlation Coefficient and Standard Deviation of the residuals
       calc_metr <- function(bin_dt) {
@@ -189,7 +188,6 @@ BusData <- R6Class(
         for (i in 1:ncol(bin_summaries)) {
           for (j in 1:nrow(bin_summaries)) {
             cell_to_insert <- bin_summaries[j,i][[1]]
-    
             get_resids <- function() {
               if (percent) {
                 #dim_names <- (list(bin_lvl[[i]], private$res_names))
@@ -204,7 +202,6 @@ BusData <- R6Class(
               }
             }
             buf_vec <- c(private$bin_lvl[[i]], private$coef_list[[j]], get_resids(), round(as.vector(cell_to_insert[[1]]), digits = 3))
-            print(buf_vec)
             summary_matrix[row_num,] <- buf_vec
             row_num <- row_num + 1
           }
@@ -217,8 +214,6 @@ BusData <- R6Class(
       private$summ_dt <- make_table()
       #Formatted Summary Table Creation
       private$form_summ_dt <- make_table(percent = TRUE)
-      
-      
     },
     get_q_fields = function() {
       print(private$q_fields)
@@ -226,14 +221,20 @@ BusData <- R6Class(
     get_orig_data = function() {
       private$orig_data
     },
-    get_optm_data = function() {
-      private$optm_data
+    get_lsft_data = function() {
+      private$lsft_data
     },
     get_norm_data = function() {
       private$norm_data
     },
-    get_op_mod = function() {
-      private$optim_model
+    get_rbst_data = function() {
+      private$rbst_dat
+    },
+    get_ls_mod = function() {
+      private$lsfit_mod
+    },
+    get_ro_mod = function() {
+      private$robust_mod
     },
     get_bin_summaries = function() {
       private$bin_summaries
