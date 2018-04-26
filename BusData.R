@@ -16,11 +16,7 @@ BusData <- R6Class(
     route       = "character",
     is_express  = "integer",
     num_of_mods = 4, 
-    #tables for the basic, fitted and fitted-normalized models
-    # orig_data   = NULL,
-    # lsft_data   = NULL,
-    # norm_data   = NULL,
-    # rbst_data   = NULL,
+    #list of applied linear models 
     mod_dat_lst = NULL, 
     #coefficients and model specific parameters
     coef_list   = NULL,
@@ -89,7 +85,7 @@ BusData <- R6Class(
       private$coef_list <- vector('list', length = num_of_mods)
       private$res_names <- c(paste0((private$res_cutoffs[-length(private$res_cutoffs)]) / 60,  " to ", (private$res_cutoffs[-1]) / 60, " mins"), "Total")
       private$bin_names <- paste0((private$bin_cutoffs[-length(private$bin_cutoffs)]) / 60, " to ", (private$bin_cutoffs[-1]) / 60, " mins")
-      setNames(private$mod_dat_lst, private$mod_names)
+      private$mod_dat_lst <- setNames(private$mod_dat_lst, private$mod_names)
       private$db_con <- db_con
       private$is_express <- is_express 
       private$route  <- route
@@ -229,17 +225,8 @@ BusData <- R6Class(
     get_q_fields = function() {
       print(private$q_fields)
     },
-    get_orig_data = function() {
-      mod_dat_lst[[1]]
-    },
-    get_lsft_data = function() {
-      private$lsft_data
-    },
-    get_norm_data = function() {
-      private$norm_data
-    },
-    get_rbst_data = function() {
-      private$rbst_dat
+    get_mod_data = function() {
+      private$mod_dat_lst
     },
     get_ls_mod = function() {
       private$lsfit_mod
@@ -262,6 +249,5 @@ BusData <- R6Class(
     get_formatted_summ_table = function() {
       private$form_summ_dt
     }
-   
    )
 )
