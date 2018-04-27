@@ -185,10 +185,15 @@ BusData <- R6Class(
       ######################################################################################################
       #Table Creation
       ######################################################################################################
-      make_table <- function(percent = FALSE) { 
+      make_table <- function(compressed = FALSE) { 
         #Create a summary table using information from the summary matrix, the models and the bin factors
+        resid_names <- private$res_names
+        if (!compressed) {
+          vp <- c(rep("%", times = 5))
+          resid_names <- c(unlist(purrr::map2(resid_names[-length(resid_names)], vp, function(x,y) {c(x,y)})), "Total")
+        }
         sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
-        sum_mat_col_names <- c("Bin", private$coef_names, private$res_names, private$meas_names)
+        sum_mat_col_names <- c("Bin", private$coef_names, resid_names, private$meas_names))
         summary_matrix <- matrix(nrow = length(bin_summaries), ncol = length(sum_mat_col_names))
         #start the row counter and build the table by looping through the summary matrix
         row_num <- 1
@@ -196,7 +201,7 @@ BusData <- R6Class(
           for (j in 1:nrow(bin_summaries)) {
             cell_to_insert <- bin_summaries[j,i][[1]]
             get_resids <- function() {
-              if (percent) {
+              if (compressed) {
                 #dim_names <- (list(bin_lvl[[i]], private$res_names))
                 num_vec <- as.vector(cell_to_insert[[2]])
                 per_vec <- round(purrr::map2_dbl(num_vec[-length(num_vec)], num_vec[length(num_vec)], function(x,y) (x/y * 100)), digits = 2)
@@ -205,9 +210,13 @@ BusData <- R6Class(
                 #dimnames(form_resids) <- dim_names
                 return(form_resids)
               } else {
-                return(as.vector(cell_to_insert[[2]]))
+                cell <- cell_to_insert[[2]]
+                per_vec <- round(purrr::map2_dbl(cell[-length(cell)], cell[length(cell)], function(x,y) (x/y * 100)), digits = 2)
+                res_w_perc <- c(rbind(as.vector(rbind(cell[-length(cell)], per_vec))), cell[length(cell)])
+                return(res_w_perc)
               }
             }
+            
             buf_vec <- c(private$bin_lvl[[i]], private$coef_list[[j]], get_resids(), round(as.vector(cell_to_insert[[1]]), digits = 3))
             summary_matrix[row_num,] <- buf_vec
             row_num <- row_num + 1
@@ -220,7 +229,7 @@ BusData <- R6Class(
       #Summary Table
       private$summ_dt <- make_table()
       #Formatted Summary Table Creation
-      private$form_summ_dt <- make_table(percent = TRUE)
+      private$form_summ_dt <- make_table(compressed = TRUE)
     },
     get_q_fields = function() {
       print(private$q_fields)
