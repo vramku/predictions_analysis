@@ -193,7 +193,7 @@ BusData <- R6Class(
           resid_names <- c(unlist(purrr::map2(resid_names[-length(resid_names)], vp, function(x,y) {c(x,y)})), "Total")
         }
         sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
-        sum_mat_col_names <- c("Bin", private$coef_names, resid_names, private$meas_names))
+        sum_mat_col_names <- c("Bin", private$coef_names, resid_names, private$meas_names)
         summary_matrix <- matrix(nrow = length(bin_summaries), ncol = length(sum_mat_col_names))
         #start the row counter and build the table by looping through the summary matrix
         row_num <- 1
@@ -217,13 +217,16 @@ BusData <- R6Class(
               }
             }
             
-            buf_vec <- c(private$bin_lvl[[i]], private$coef_list[[j]], get_resids(), round(as.vector(cell_to_insert[[1]]), digits = 3))
+            buf_vec <- c(private$bin_names[[i]], private$coef_list[[j]], get_resids(), round(as.vector(cell_to_insert[[1]]), digits = 3))
             summary_matrix[row_num,] <- buf_vec
             row_num <- row_num + 1
           }
         }
         dimnames(summary_matrix) <- list(sum_mat_row_names, sum_mat_col_names)
-        return(table <- as.data.table(summary_matrix, keep.rownames = TRUE))
+        table <- as.data.table(summary_matrix, keep.rownames = TRUE)
+        table[,':='(SD = as.integer(SD), Mean = as.integer(Mean), Median = as.integer(Median))]
+        names(table)[[1]] <- "Coefficients"
+        return(table)
       }
       
       #Summary Table
