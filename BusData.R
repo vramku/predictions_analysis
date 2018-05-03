@@ -86,8 +86,9 @@ BusData <- R6Class(
     create_name = function() {
       t_min <- min(private$mod_dat_lst[[1]]$t_stamp)
       t_str <- round((max(private$mod_dat_lst[[1]]$t_stamp) - t_min), digits = 1)
-      exp <- ifelse(private$is_express, "Express Data", ifelse(is.null(private$is_express), "Aggregate", "Local"))
-      name <- paste(exp, t_min, "Spanning", t_str, units(t_str), sep = " ")
+      exp <- ifelse(private$is_express, "Express Data for", ifelse(is.null(private$is_express), "Aggregate Data for", "Local Data for"))
+      name <- paste(exp, t_min, "spanning", t_str, units(t_str), sep = " ")
+      if (!is.null(private$route)) name <- paste(name, "for route", private$route, sep = " ")
       return(name)
     }
     ),
