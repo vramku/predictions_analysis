@@ -12,10 +12,13 @@ BusData <- R6Class(
     #############################################################################################
     #Private Attribues
     #############################################################################################
-    db_con      = "S4",
-    route       = "character",
-    is_express  = "integer",
-    num_of_mods = 4, 
+    name          = "character",
+    db_con        = "S4",
+    route         = "character",
+    is_express    = "integer",
+    stop_gtfs_seq = "integer",
+    op_arg_lst    = vector('list'),
+    num_of_mods   = 4, 
     #list of applied linear models 
     mod_dat_lst = NULL, 
     #coefficients and model specific parameters
@@ -30,6 +33,7 @@ BusData <- R6Class(
     q_fields = c("vehicle", "t_stamp", "stop_gtfs_seq", "hist_cum", "rece_cum", "sche_cum", 
                  "t_predicted", "t_measured", "route", "depot", "is_express"),
     q_table  = "mta_bus_data",
+    db_query = NULL, 
     #Matrices for Results
     bin_summaries = NULL,
     summ_dt       = NULL, 
@@ -43,13 +47,26 @@ BusData <- R6Class(
     ################################################################################################
     #Private Functions
     ################################################################################################
-    read_from_db = function(db_con, is_express) {
-      query <- paste0("SELECT ", str_c(private$q_fields, collapse = ', '), " FROM ", private$q_table)
-      if (is.null(is_express)) {
-        private$mod_dat_lst[[1]] <- dbGetQuery(db_con, query)
-      } else {
-        private$mod_dat_lst[[1]] <- dbGetQuery(db_con, paste0(query, " WHERE is_express = ", is_express))
+    read_from_db = function(db_con) { 
+      db_query <- paste0("SELECT ", str_c(private$q_fields, collapse = ', '), " FROM ", private$q_table)
+      arg_vec <- unlist(private$op_arg_lst)
+      counter <- length(arg_vec)
+      if (!is.null(arg_vec)) {
+        arg_names <- names(arg_vec)
+        db_query <- paste0(db_query, " WHERE")
+        for (arg_name in arg_names) {
+          arg_val <- arg_vec[[arg_name]]
+          if (arg_name == 'route') arg_val <- paste0("'",arg_val,"'")
+          db_query <- paste(db_query, arg_name, "=", arg_val, sep = " ")
+          if (counter > 1) {
+            db_query <- paste(db_query, "AND", sep = " ")
+            counter <- counter - 1
+          }
+        }
       }
+      print(db_query)
+      private$db_query <- db_query
+      private$mod_dat_lst[[1]] <- dbGetQuery(db_con, private$db_query)
       private$mod_dat_lst[[1]] <- transform(private$mod_dat_lst[[1]], t_stamp = as_datetime(as.double(t_stamp), tz = "America/New_York"))
       private$mod_dat_lst[[1]] <- as.data.table(private$mod_dat_lst[[1]])
     },
@@ -58,12 +75,20 @@ BusData <- R6Class(
       coef_sum <- sum(x)
       x <- unlist(lapply(x, function(coef) {coef / coef_sum}))
     },
+    #calculates new predictions based on supplied coefficiensts and bins the results
     create_mod_dt = function(orig_dt, applied_mod = NULL, mcoefs = NULL) {
       if (is.null(mcoefs)) mcoefs <- as.vector(coefficients(applied_mod))
       new_dt <- orig_dt[, !c("t_predicted", "pred_bin"), with = FALSE]
       new_dt[,':='(t_predicted = mcoefs[1] * hist_cum + mcoefs[2] * rece_cum + mcoefs[3] * sche_cum)
              ][,':='(pred_bin = cut(t_predicted, private$bin_cutoffs,  dig.lab = 5),
                      abs_res = abs(t_measured - t_predicted))]
+    },
+    create_name = function() {
+      t_min <- min(private$mod_dat_lst[[1]]$t_stamp)
+      t_str <- round((max(private$mod_dat_lst[[1]]$t_stamp) - t_min), digits = 1)
+      exp <- ifelse(private$is_express, "Express Data", ifelse(is.null(private$is_express), "Aggregate", "Local"))
+      name <- paste(exp, t_min, "Spanning", t_str, units(t_str), sep = " ")
+      return(name)
     }
     ),
     
@@ -72,14 +97,20 @@ BusData <- R6Class(
     #Public Interface 
     ############################################################
     print = function() {
-      cat("BusData Elements:\n", private$is_express, private$route, "\n")
+      print(private$name)
       print(private$db_con)
-      print(no_coef)
-      
+      print(private$db_query)
+      lapply(private$mod_dat_lst, summary)
     },
     #constructor: data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
-    initialize = function(db_con, is_express = NULL, route = NULL) {
+    initialize = function(db_con, is_express = NULL, route = NULL, stop_gtfs_seq = NULL) {
       #initialize private fields and save arguments 
+      private$op_arg_lst <- formals()[2:length(formals())]
+      op_arg_lst <- (as.list(match.call()))[-c(1:2)]
+      print(op_arg_lst)
+      for (arg_name in names(op_arg_lst)) { 
+          private$op_arg_lst[arg_name] <- op_arg_lst[arg_name]
+      }
       num_of_mods <- private$num_of_mods
       private$mod_dat_lst <- vector('list', length = num_of_mods)
       private$coef_list <- vector('list', length = num_of_mods)
@@ -87,10 +118,12 @@ BusData <- R6Class(
       private$bin_names <- paste0((private$bin_cutoffs[-length(private$bin_cutoffs)]) / 60, " to ", (private$bin_cutoffs[-1]) / 60, " mins")
       private$mod_dat_lst <- setNames(private$mod_dat_lst, private$mod_names)
       private$db_con <- db_con
-      private$is_express <- is_express 
-      private$route  <- route
-      orig_data <- private$read_from_db(db_con, is_express)
+      private$is_express <- is_express
+      private$stop_gtfs_seq <- stop_gtfs_seq
+      private$route <- as.character(route)
+      orig_data <- private$read_from_db(db_con)
       orig_coef <- c(0.4, 0.4, 0.2)
+      private$name <- private$create_name()
       
       #####################################################################################
       #Data Set Partitioning (by model) and Initialization
@@ -234,8 +267,8 @@ BusData <- R6Class(
       #Formatted Summary Table Creation
       private$form_summ_dt <- make_table(compressed = TRUE)
     },
-    get_q_fields = function() {
-      print(private$q_fields)
+    get_db_query = function() {
+      print(private$db_query)
     },
     get_mod_data = function() {
       private$mod_dat_lst
@@ -260,6 +293,21 @@ BusData <- R6Class(
     },
     get_formatted_summ_table = function() {
       private$form_summ_dt
+    },
+    get_bin_names = function() {
+      private$bin_names
+    },
+    get_res_names = function() {
+      private$res_names
+    },
+    get_res_cuts = function() {
+      private$res_cutoffs
+    },
+    get_bin_cuts = function() {
+      private$bin_cutoffs
+    },
+    get_op_args = function() {
+      private$op_arg_lst
     }
    )
 )
