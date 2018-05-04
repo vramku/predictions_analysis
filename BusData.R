@@ -14,7 +14,7 @@ BusData <- R6Class(
     #############################################################################################
     name          = "character",
     db_con        = "S4",
-    route         = "character",
+    route         = NULL,
     is_express    = "integer",
     stop_gtfs_seq = "integer",
     op_arg_lst    = vector('list'),
@@ -86,9 +86,10 @@ BusData <- R6Class(
     create_name = function() {
       t_min <- min(private$mod_dat_lst[[1]]$t_stamp)
       t_str <- round((max(private$mod_dat_lst[[1]]$t_stamp) - t_min), digits = 1)
-      exp <- ifelse(private$is_express, "Express Data for", ifelse(is.null(private$is_express), "Aggregate Data for", "Local Data for"))
+     
+      exp <- ifelse(is.null(private$is_express), "Aggregate Data for", ifelse(private$is_express, "Express Data for", "Local Data for"))
       name <- paste(exp, t_min, "spanning", t_str, units(t_str), sep = " ")
-      if (!is.null(private$route)) name <- paste(name, "for route", private$route, sep = " ")
+      if (length(private$route == 0)) name <- paste("Route", private$route, "Data for", t_min, "spanning", t_str, units(t_str), sep = " ")
       return(name)
     }
     ),
@@ -119,13 +120,13 @@ BusData <- R6Class(
       private$bin_names <- paste0((private$bin_cutoffs[-length(private$bin_cutoffs)]) / 60, " to ", (private$bin_cutoffs[-1]) / 60, " mins")
       private$mod_dat_lst <- setNames(private$mod_dat_lst, private$mod_names)
       private$db_con <- db_con
-      private$is_express <- is_express
+      private$is_express <- is_express 
       private$stop_gtfs_seq <- stop_gtfs_seq
       private$route <- as.character(route)
       orig_data <- private$read_from_db(db_con)
       orig_coef <- c(0.4, 0.4, 0.2)
       private$name <- private$create_name()
-      
+      print(is.null(private$is_express))
       #####################################################################################
       #Data Set Partitioning (by model) and Initialization
       #####################################################################################
@@ -309,6 +310,9 @@ BusData <- R6Class(
     },
     get_op_args = function() {
       private$op_arg_lst
+    },
+    get_name = function() {
+      private$name
     }
    )
 )
