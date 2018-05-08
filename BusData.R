@@ -86,10 +86,15 @@ BusData <- R6Class(
     create_name = function() {
       t_min <- min(private$mod_dat_lst[[1]]$t_stamp)
       t_str <- round((max(private$mod_dat_lst[[1]]$t_stamp) - t_min), digits = 1)
-     
-      exp <- ifelse(is.null(private$is_express), "Aggregate Data for", ifelse(private$is_express, "Express Data for", "Local Data for"))
-      name <- paste(exp, t_min, "spanning", t_str, units(t_str), sep = " ")
-      if (length(private$route == 0)) name <- paste("Route", private$route, "Data for", t_min, "spanning", t_str, units(t_str), sep = " ")
+      name_vec <- c("Route", "Stop GTFS Seq", "Vehicle", "Direction")
+      name_ctr <- 1
+      exp <- ifelse(is.null(private$is_express), "Aggregate Data for", 
+                    ifelse(private$is_express, "Express Data for", "Local Data for"))
+      name <- paste(exp, t_min, "Time Interval:", t_str, units(t_str), sep = " ")
+      for (arg in private$op_arg_lst[2:length(private$op_arg_lst)]) {
+      if (!is.null(arg)) name <- paste(name, name_vec[name_ctr], arg, sep = " ")
+      name_ctr <- name_ctr + 1
+      }
       return(name)
     }
     ),
@@ -105,7 +110,7 @@ BusData <- R6Class(
       lapply(private$mod_dat_lst, summary)
     },
     #constructor: data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
-    initialize = function(db_con, is_express = NULL, route = NULL, stop_gtfs_seq = NULL) {
+    initialize = function(db_con, is_express = NULL, route = NULL, stop_gtfs_seq = NULL, vehicle = NULL, direction = NULL) {
       #initialize private fields and save arguments 
       private$op_arg_lst <- formals()[2:length(formals())]
       op_arg_lst <- (as.list(match.call()))[-c(1:2)]

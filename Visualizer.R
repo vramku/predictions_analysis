@@ -53,10 +53,11 @@ Visualizer <- R6Class(
     },
     get_scatter_basic = function(model) {
       dt <- private$mod_data[[model]]
+      mod_name <- ifelse(is.numeric(model), names(private$mod_data)[model], model)
       ggplot(dt, aes(x = t_predicted, y = t_measured, colour = stop_gtfs_seq)) +
         geom_point() + 
         labs(
-          title = private$graph_name 
+          title = paste(private$graph_name, mod_name, "Model", sep = " ")
         )
     }
   )
