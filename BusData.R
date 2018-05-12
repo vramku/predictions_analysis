@@ -49,6 +49,7 @@ BusData <- R6Class(
     ################################################################################################
     read_from_db = function(db_con) { 
       db_query <- paste0("SELECT ", str_c(private$q_fields, collapse = ', '), " FROM ", private$q_table)
+      print(private$op_arg_lst)
       arg_vec <- unlist(private$op_arg_lst)
       counter <- length(arg_vec)
       if (!is.null(arg_vec)) {
@@ -88,8 +89,9 @@ BusData <- R6Class(
       t_str <- round((max(private$mod_dat_lst[[1]]$t_stamp) - t_min), digits = 1)
       name_vec <- c("Route", "Stop GTFS Seq", "Vehicle", "Direction")
       name_ctr <- 1
-      exp <- ifelse(is.null(private$is_express), "Aggregate Data for", 
-                    ifelse(private$is_express, "Express Data for", "Local Data for"))
+      is_null_args <- is.null(unlist(private$op_arg_lst))
+      exp <- ifelse(is_null_args, "Aggregate Data for", 
+                    ifelse(private$mod_dat_lst[[1]]$is_express[1], "Express Data for", "Local Data for"))
       name <- paste(exp, t_min, "Time Interval:", t_str, units(t_str), sep = " ")
       for (arg in private$op_arg_lst[2:length(private$op_arg_lst)]) {
       if (!is.null(arg)) name <- paste(name, name_vec[name_ctr], arg, sep = " ")
@@ -110,11 +112,12 @@ BusData <- R6Class(
       lapply(private$mod_dat_lst, summary)
     },
     #constructor: data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
-    initialize = function(db_con, is_express = NULL, route = NULL, stop_gtfs_seq = NULL, vehicle = NULL, direction = NULL) {
+    #IMPORTANT: When passing arguments to this function that are variables, use do.call() function to ignore R's lazy evaluation rules
+    initialize = function(db_con, is_express = NULL, route = NULL, vehicle = NULL, direction = NULL, stop_gtfs_seq = NULL) {
       #initialize private fields and save arguments 
       private$op_arg_lst <- formals()[2:length(formals())]
       op_arg_lst <- (as.list(match.call()))[-c(1:2)]
-      print(op_arg_lst)
+      #print(op_arg_lst)
       for (arg_name in names(op_arg_lst)) { 
           private$op_arg_lst[arg_name] <- op_arg_lst[arg_name]
       }
@@ -229,7 +232,7 @@ BusData <- R6Class(
         #Create a summary table using information from the summary matrix, the models and the bin factors
         resid_names <- private$res_names
         if (!compressed) {
-          vp <- c(rep("%", times = 5))
+          vp <- str_c(c(rep("%", times = length(resid_names) - 1)), " Bin ", c(1:(length(resid_names) - 1)))
           resid_names <- c(unlist(purrr::map2(resid_names[-length(resid_names)], vp, function(x,y) {c(x,y)})), "Total")
         }
         sum_mat_row_names <- (rep(private$mod_names, times = length(private$bin_lvl)))
@@ -318,6 +321,12 @@ BusData <- R6Class(
     },
     get_name = function() {
       private$name
+    },
+    write_table = function() {
+      hs <- createStyle(fontColour = "#ffffff", fgFill = "#4F80BD",
+                        halign = "center", valign = "center", textDecoration = "Bold",
+                        border = "TopBottomLeftRight") 
+      
     }
    )
 )

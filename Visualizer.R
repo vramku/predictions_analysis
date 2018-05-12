@@ -56,9 +56,22 @@ Visualizer <- R6Class(
       mod_name <- ifelse(is.numeric(model), names(private$mod_data)[model], model)
       ggplot(dt, aes(x = t_predicted, y = t_measured, colour = stop_gtfs_seq)) +
         geom_point() + 
+        theme(legend.position = "bottom") +
+        #geom_smooth(formula = y ~ x) +
         labs(
-          title = paste(private$graph_name, mod_name, "Model", sep = " ")
+          title = paste(private$graph_name, mod_name, "Model", sep = " "),
+          x = "Predicted Time (secs)",
+          y = "Measured Time (secs)"
         )
+    },
+    set_bus_data = function(bus_data_obj) {
+      private$bin_cuts <- bus_data_obj$get_bin_cuts()
+      private$res_cuts <- bus_data_obj$get_res_cuts()
+      private$bin_names <- bus_data_obj$get_bin_names()
+      private$res_names <- bus_data_obj$get_res_names()
+      private$mod_data  <- bus_data_obj$get_mod_data()
+      private$graph_name <- bus_data_obj$get_name()
+      print(private$graph_name)
     }
   )
 )
