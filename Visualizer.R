@@ -1,4 +1,5 @@
 library(R6)
+library(ggplot2)
 
 Visualizer <- R6Class(
   # Set the name for the class; figure out how to chain method calls for in place data manipulation 

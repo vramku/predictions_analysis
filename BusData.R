@@ -47,24 +47,28 @@ BusData <- R6Class(
     ################################################################################################
     #Private Functions
     ################################################################################################
-    read_from_db = function(db_con) { 
-      db_query <- paste0("SELECT ", str_c(private$q_fields, collapse = ', '), " FROM ", private$q_table)
-      print(private$op_arg_lst)
-      arg_vec <- unlist(private$op_arg_lst)
-      counter <- length(arg_vec)
-      if (!is.null(arg_vec)) {
-        arg_names <- names(arg_vec)
-        db_query <- paste0(db_query, " WHERE")
-        for (arg_name in arg_names) {
-          arg_val <- arg_vec[[arg_name]]
-          if (arg_name == 'route') arg_val <- paste0("'",arg_val,"'")
-          db_query <- paste(db_query, arg_name, "=", arg_val, sep = " ")
-          if (counter > 1) {
-            db_query <- paste(db_query, "AND", sep = " ")
-            counter <- counter - 1
+    read_from_db = function(db_con, query = NULL) { 
+      if (is.null(query)) {
+        db_query <- paste0("SELECT ", str_c(private$q_fields, collapse = ', '), " FROM ", private$q_table)
+        print(private$op_arg_lst)
+        arg_vec <- unlist(private$op_arg_lst)
+        counter <- length(arg_vec)
+        if (!is.null(arg_vec)) {
+          arg_names <- names(arg_vec)
+          db_query <- paste0(db_query, " WHERE")
+          for (arg_name in arg_names) {
+            arg_val <- arg_vec[[arg_name]]
+            if (arg_name == 'route') arg_val <- paste0("'",arg_val,"'")
+            db_query <- paste(db_query, arg_name, "=", arg_val, sep = " ")
+            if (counter > 1) {
+              db_query <- paste(db_query, "AND", sep = " ")
+              counter <- counter - 1
+            }
           }
         }
-      }
+      } else {
+        db_query <- query
+      } 
       print(db_query)
       private$db_query <- db_query
       private$mod_dat_lst[[1]] <- dbGetQuery(db_con, private$db_query)
@@ -113,7 +117,7 @@ BusData <- R6Class(
     },
     #constructor: data.table library is used for efficiency reasons; please refer to dt docs for help with syntax
     #IMPORTANT: When passing arguments to this function that are variables, use do.call() function to ignore R's lazy evaluation rules
-    initialize = function(db_con, is_express = NULL, route = NULL, vehicle = NULL, direction = NULL, stop_gtfs_seq = NULL) {
+    initialize = function(db_con, is_express = NULL, route = NULL, vehicle = NULL, direction = NULL, stop_gtfs_seq = NULL, query = NULL) {
       #initialize private fields and save arguments 
       private$op_arg_lst <- formals()[2:length(formals())]
       op_arg_lst <- (as.list(match.call()))[-c(1:2)]
@@ -131,7 +135,7 @@ BusData <- R6Class(
       private$is_express <- is_express 
       private$stop_gtfs_seq <- stop_gtfs_seq
       private$route <- as.character(route)
-      orig_data <- private$read_from_db(db_con)
+      orig_data <- private$read_from_db(db_con, query)
       orig_coef <- c(0.4, 0.4, 0.2)
       private$name <- private$create_name()
       print(is.null(private$is_express))
