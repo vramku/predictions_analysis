@@ -38,6 +38,7 @@ BusData <- R6Class(
     bin_summaries = NULL,
     summ_dt       = NULL, 
     form_summ_dt  = NULL, 
+    whole_mod_mat = NULL, 
     #Name Vectors 
     bin_names  = NULL,
     res_names  = NULL,
@@ -225,6 +226,19 @@ BusData <- R6Class(
       }
       #Save the summary matrix for bins. Each cell is a two member list containing metric and residual matrices.
       private$bin_summaries <- bin_summaries
+      
+      #Calculate metrics over all of the data for each model 
+      private$whole_mod_mat <- matrix(nrow = length(res_funs) + 1, ncol = length(private$mod_dat_lst))
+      wmm_names <- list(private$mod_names, private$meas_names)
+      for (md_inx in seq_along(private$mod_dat_lst)) {
+        wmetr_mat <- matrix(nrow = 1, ncol = length(private$meas_names))
+        wmetr_mat[1,1] <- round(cor(private$mod_dat_lst[[md_inx]]$t_measured, private$mod_dat_lst[[md_inx]]$t_predicted)^2, digits = 2)
+        for (inx in 2:length(wmetr_mat)) {
+          wmetr_mat[1,inx] <- trunc(res_funs[[inx - 1]](private$mod_dat_lst[[md_inx]]$abs_res))
+        }
+        private$whole_mod_mat[md_inx,] <- wmetr_mat
+      }
+      dimnames(private$whole_mod_mat) <- wmm_names 
       ######################################################################################################
       #Table Creation
       ######################################################################################################
@@ -321,6 +335,9 @@ BusData <- R6Class(
     },
     get_name = function() {
       private$name
+    },
+    get_whole_mets = function() {
+      private$whole_mod_mat
     },
     write_table = function() {
       hs <- createStyle(fontColour = "#ffffff", fgFill = "#4F80BD",
