@@ -4,6 +4,7 @@ library(stringr)
 library(data.table)
 library(lubridate)
 library(MASS)
+
 BusData <- R6Class(
   # Set the name for the class; figure out how to chain method calls for in place data manipulation 
   "BusData",
@@ -91,7 +92,7 @@ BusData <- R6Class(
     create_name = function() {
       t_min <- min(private$mod_dat_lst[[1]]$t_stamp)
       t_str <- round((max(private$mod_dat_lst[[1]]$t_stamp) - t_min), digits = 1)
-      name_vec <- c("Route", "Stop GTFS Seq", "Vehicle", "Direction")
+      name_vec <- c("Route", "Vehicle", "Direction", "Stop GTFS Seq")
       name_ctr <- 1
       is_null_args <- is.null(unlist(private$op_arg_lst))
       exp <- ifelse(is_null_args, "Aggregate Data for", 
