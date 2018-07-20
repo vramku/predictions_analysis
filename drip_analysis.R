@@ -18,14 +18,14 @@ data <- transform(data, t_stamp = as_datetime(as.double(t_stamp)))
 
 #pass a cut based on vehicle and block
 drip_cut <- function(df) {
+  #partition the dataframe by stop_gtfs_seq
   max_gtfs <- max(drip_samp$stop_gtfs_seq)
   stop_slices <- vector("list", length = max_gtfs)
-  
   for (stop in 1:max_gtfs) {
     print(stop_slices[[stop]] <- filter(df, stop_gtfs_seq == stop))
   }
-  
   print(stop_slices)
+  #create a list of timestamps corresponding to "drip" signals by using the gtfs stop 1 group
   drip_stamp <- vector("list")
   rows_in_gtfs_one <- nrow(stop_slices[[1]])
   if(rows_in_gtfs_one < 4) return()
@@ -36,12 +36,16 @@ drip_cut <- function(df) {
     dist_advanced <- stop_slices[[1]]$dist_covered[lead_inx] - stop_slices[[1]]$dist_covered[lag_inx]
     print(dist_advanced)
     if (dist_advanced < 30) {
-      append(drip_stamp, stop_slices[[1]]$t_stamp[lag_inx])
-      print(stop_slices[[1]]$t_stamp[lag_inx])
+      drip_stamp <- append(drip_stamp, stop_slices[[1]]$t_stamp[lag_inx])
     }
     lead_inx <- lead_inx + 1
     lag_inx <- lag_inx + 1
   }
+  #delete drip entries from each of the stop_gtfs partitions
+  for (stop in 1:max_gtfs) {
+    stop_slices[[stop]] <- dplyr::filter(stop_slices[[stop]], !(stop_slices[[stop]]$t_stamp %in% drip_stamp))
+  }
+  stop_slices
 }
 
 
