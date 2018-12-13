@@ -34,8 +34,8 @@ Arrivals <- read_csv("raw_data/split_aa.csv")
 #Make column names short and consistent (underscore-separated naming convention) 
 names(Arrivals)[names(Arrivals) == 'tailStopArrivalTime'] <- 'tail_stop_arr_time'
 names(Arrivals)[names(Arrivals) == 'stop_gtfs_sequence'] <- 'stop_gtfs_seq'
-names(Arrivals)[names(Arrivals) == 'distance_along_trip'] <- 'dist_covered'
-names(Arrivals)[names(Arrivals) == 'stop_distance_along_trip'] <- 'dist_from_origin'
+names(Arrivals)[names(Arrivals) == 'distance_along_trip'] <- 'dist_covered' #distance a bus has covered
+names(Arrivals)[names(Arrivals) == 'stop_distance_along_trip'] <- 'dist_from_origin'#distance of the predicted stop from origin
 names(Arrivals)[names(Arrivals) == 'distance_of_trip'] <- 'total_trip_dist'
 names(Arrivals)[names(Arrivals) == 'time_of_sample'] <- 't_stamp'
 
