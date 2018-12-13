@@ -15,4 +15,6 @@ dbDisconnect(con)
 
 data <- transform(data, t_stamp = as_datetime(as.double(t_stamp)))
 
-drip_times <- data %>% group_by(t_predicted) %>% do(count(.)) %>% filter(any(n > 3))
+#filter the data to locate "drips" 
+drip_cols <- c("vehicle", "t_predicted", "stop_gtfs_seq")
+drips <- as.data.table(data)[, if(.N > 3) .SD, by = drip_cols]
