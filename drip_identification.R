@@ -24,3 +24,15 @@ drips <- data[, if(.N > 3) .SD, by = drip_cols]
 setkey(data, vehicle, t_predicted, t_stamp, stop_gtfs_seq)
 setkey(drips, vehicle, t_predicted, t_stamp, stop_gtfs_seq)
 data_wo_drips <- data[!drips]
+
+drip_removal <- (data) {
+  #filter the data to locate "drips" 
+  data <- as.data.table(data)
+  drip_cols <- c("vehicle", "t_predicted", "stop_gtfs_seq")
+  drips <- data[, if(.N > 3) .SD, by = drip_cols]
+  
+  #perform an antijoin of the data and drips tables
+  setkey(data, vehicle, t_predicted, t_stamp, stop_gtfs_seq)
+  setkey(drips, vehicle, t_predicted, t_stamp, stop_gtfs_seq)
+  data_wo_drips <- data[!drips]
+}
