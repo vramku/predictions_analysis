@@ -2,14 +2,28 @@ library(tidyverse)
 library(RSQLite)
 library(rJava)
 library(openxlsx)
-source("BusData.R")
+source("BusDataDT.R")
 source("Visualizer.R")
 
 drv <- dbDriver("SQLite")
 con <- dbConnect(drv, 'nov9_bus_data.db', flags = SQLITE_RO)
 
 #locobj <- BusData$new(con, 0)
-expobj <- BusData$new(con, 1)
+expobj <- BusDataDT$new(con, 1)
+
+drip_removal <- function (data) {
+  #filter the data to locate "drips" by grouping by drip_cols
+  data <- as.data.table(data)
+  data[, ':=' (day = day(t_stamp))]
+  drip_cols <- c("vehicle", "t_predicted", "stop_gtfs_seq", "day")
+  drips <- data[, if(.N > 3) .SD[-(1:3)], by = drip_cols]
+  data[, c("day") := NULL]
+  
+  #perform an antijoin of the data and drips tables
+  setkey(data, vehicle, t_predicted, t_stamp, stop_gtfs_seq)
+  setkey(drips, vehicle, t_predicted, t_stamp, stop_gtfs_seq)
+  data_wo_drips <- data[!drips]
+}
 
 #locdata <- locobj$get_mod_data()[[1]]
 
@@ -28,7 +42,7 @@ names(rob_graph_list) <- routes_vec[[1]]
 names(bar_list) <- routes_vec[[1]]
 
 for (inx in seq_len(length(routes_vec[[1]]))) {
-  bus_obj <- do.call(BusData$new, list(con, route = routes_vec$route[inx]))
+  bus_obj <- do.call(BusDataDT$new, list(con, route = routes_vec$route[inx]))
   grapher$set_bus_data(bus_obj)
   graph_list[[inx]] <- grapher$get_scatter_basic("Original")
   rob_graph_list[[inx]] <- grapher$get_scatter_basic("Robust")
@@ -78,13 +92,14 @@ hs <- createStyle(fontColour = "#FFFFFF", fgFill = "#4F80BD",
 for (inx in seq_len(length(routes_vec[[1]]))) {
   con <- dbConnect(drv, 'nov9_bus_data.db', flags = SQLITE_RO)
   
-  bus_obj <- do.call(BusData$new, list(con, route = routes_vec$route[inx]))
+  bus_obj <- do.call(BusDataDT$new, list(con, route = routes_vec$route[inx], opt_func = drip_removal))
   grapher <- Visualizer$new(bus_obj)
   print("Generating graphs...")
   org_scatter <- grapher$get_scatter_basic("Original")
   rob_scatter <- grapher$get_scatter_basic("Robust")
   org_bar_plt <- grapher$get_dodged_bar("Original")
   summ_tbl    <- bus_obj$get_summary_table()
+  whl_mod_tbl <- as.data.table(bus_obj$get_whole_mets(), keep.rownames = T)
   #close the db connection
   dbDisconnect(con)
   
@@ -95,18 +110,18 @@ for (inx in seq_len(length(routes_vec[[1]]))) {
   setColWidths(wb, 1, cols = 1:20, widths = 13)
   freezePane(wb, 1, firstActiveRow = 2)
   writeDataTable(wb, 1, summ_tbl, headerStyle = hs, startRow = 1, tableStyle = "TableStyleMedium1")
+  writeDataTable(wb, 1, whl_mod_tbl, startRow = 30, startCol = "F", tableStyle = "TableStyleMedium1")
   
   print(org_scatter)
-  insertPlot(wb, 1, xy = c("A", 30), width = 9.5, height = 8)
+  insertPlot(wb, 1, xy = c("A", 36), width = 9.5, height = 8)
   
   print(rob_scatter)
-  insertPlot(wb, 1, xy = c("I", 30), width = 9.5, height = 8)
+  insertPlot(wb, 1, xy = c("K", 36), width = 9.5, height = 8)
   
   print(org_bar_plt)
-  insertPlot(wb, 1, xy = c("A", 72), width = 19, height = 10)
-  
-  print(object.size(wb))
-  saveWorkbook(wb, file = paste0(routes_vec[[1]][inx], ".xlsx"))
+  insertPlot(wb, 1, xy = c("A", 76), width = 19, height = 10)
+
+  saveWorkbook(wb, file = paste0(routes_vec[[1]][inx], "_no_drips4.xlsx"))
   
   #release resources: first line clears the graphs, the second deletes objects
   if (!is.null(dev.list())) dev.off()

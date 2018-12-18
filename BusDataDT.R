@@ -140,7 +140,7 @@ BusDataDT <- R6Class(
       orig_data <- private$read_from_db(db_con, query)
       if (hasArg(opt_func)) {
         orig_data <- opt_func(orig_data)
-        print("fuck you")
+        print("Filtering using optional function.")
       }
       orig_coef <- c(0.4, 0.4, 0.2)
       private$name <- private$create_name()
